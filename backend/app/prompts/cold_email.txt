@@ -1,0 +1,18 @@
+You are writing a personalized cold email for GlobalReach.
+
+Lead info:
+- Name: {first_name}
+- Company: {company}
+- Title: {title}
+- Industry: {industry}
+
+Campaign goal: {campaign_goal}
+
+Write a subject line and email body that:
+1. Opens with a specific observation about their company or role (no generic openers)
+2. Explains how GlobalReach helps {industry} founders get international clients
+3. Ends with one clear, low-commitment CTA (e.g. "Worth a 15-min call?")
+4. Is under 150 words
+5. Sounds human, not like a template
+
+Return JSON: {"subject": "...", "body": "..."}

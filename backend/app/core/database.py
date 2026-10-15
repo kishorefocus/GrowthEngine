@@ -3,9 +3,12 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
+from app.models.base import Base  # noqa: F401 — keeps Base accessible via database module
+
+# Re-export Base for backwards compat
+__all__ = ["Base", "engine", "AsyncSessionLocal", "get_db", "check_database_connection", "init_db"]
 
 # Async PostgreSQL engine with asyncpg
 engine = create_async_engine(
@@ -22,11 +25,6 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
-
-
-class Base(DeclarativeBase):
-    """Declarative Base for all database models."""
-    pass
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -63,7 +61,9 @@ async def check_database_connection() -> dict:
 
 
 async def init_db() -> None:
-    """Create database tables if they do not exist."""
+    """Create database tables if they do not exist (dev only — use Alembic in production)."""
+    # Import all models to register them with Base.metadata
+    import app.models  # noqa: F401
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

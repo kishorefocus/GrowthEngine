@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,12 +10,67 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "GrowthEngine API"
+    app_name: str = "GlobalReach Growth Engine API"
     environment: str = "local"
-    api_prefix: str = "/api"
+    api_prefix: str = "/api/v1"
 
     # PostgreSQL async connection URL (asyncpg)
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/growthengine"
+
+    # Redis
+    redis_url: str = "redis://localhost:6379/0"
+
+    # Auth
+    jwt_secret: str = "changeme-jwt-secret-at-least-32-chars"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 30
+
+    # Encryption (Fernet key for OAuth tokens)
+    encryption_key: str = ""  # generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+    # Frontend URL
+    frontend_url: str = "https://www.getyourclientsb2b.com"
+    api_url: str = "http://localhost:8000"
+
+    # Dry run mode (default true — nothing sent until owner flips)
+    dry_run: bool = True
+
+    # AI
+    anthropic_api_key: str = ""
+
+    # Email
+    email_provider: str = "resend"
+    resend_api_key: str = ""
+    sending_domain: str = ""
+    physical_address: str = ""
+    unsubscribe_secret: str = "changeme-unsubscribe-secret"
+
+    # Social APIs
+    x_client_id: str = ""
+    x_client_secret: str = ""
+    linkedin_client_id: str = ""
+    linkedin_client_secret: str = ""
+    meta_app_id: str = ""
+    meta_app_secret: str = ""
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
+    # Storage (Cloudflare R2 / S3 compatible)
+    s3_endpoint: str = ""
+    s3_bucket: str = ""
+    s3_key: str = ""
+    s3_secret: str = ""
+
+    # GlobalReach dogfooding
+    globalreach_api_url: str = ""
+    globalreach_api_key: str = ""
+
+    # Signup webhook from main product
+    signup_webhook_secret: str = "changeme-webhook-secret"
+
+    # Sentry
+    sentry_dsn: str = ""
 
     cors_origins: list[str] = [
         "http://localhost:3000",

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -13,8 +14,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GrowthEngine — Connected Next.js + Python + PostgreSQL Stack",
-  description: "Starter template with Next.js frontend, Python FastAPI backend, and PostgreSQL database connected seamlessly.",
+  title: "GlobalReach Growth Engine",
+  description: "Internal admin for GlobalReach — cold email, social content, SEO, and launch tracking.",
 };
 
 export default function RootLayout({
@@ -23,9 +24,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} antialiased selection:bg-blue-500/30 selection:text-blue-200`}>
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} ${jetbrainsMono.variable} antialiased selection:bg-violet-500/30 selection:text-violet-200`}>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
