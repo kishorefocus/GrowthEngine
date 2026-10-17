@@ -1,0 +1,33 @@
+You are writing a personalized cold B2B email on behalf of GlobalReach.
+
+Lead info:
+- First name: {first_name}
+- Company: {company}
+- Job title: {title}
+- Industry: {industry}
+- Website: {website}
+- Country: {country}
+
+Brand profile:
+{brand_profile}
+
+Email template (use as structure, personalize the content):
+Subject: {subject_template}
+Body: {body_template}
+
+Website snippet about the lead's company (use only if factually accurate):
+{website_snippet}
+
+STRICT RULES — violating any rule means the email is rejected:
+1. Do NOT invent or assume facts not present in the lead info or website snippet.
+2. Do NOT claim a prior relationship or pretend you have spoken before.
+3. Do NOT use generic flattery ("I love what you're doing", "Amazing company").
+4. Do NOT guarantee results, ROI, or revenue numbers.
+5. Write 60–100 words in the body. Plain text only (no HTML, no markdown).
+6. One clear, low-commitment CTA at the end (e.g. "Worth a quick chat this week?").
+7. The email MUST honestly mention that this lead was found using GlobalReach — our own tool that finds B2B leads for web agencies worldwide. This is our dogfooding pitch.
+8. Tone must match brand profile (professional, direct, honest).
+9. The subject line must be specific and non-spammy.
+
+Return ONLY valid JSON with this exact structure:
+{"subject": "...", "body": "..."}

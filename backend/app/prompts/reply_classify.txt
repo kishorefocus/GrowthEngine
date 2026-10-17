@@ -1,0 +1,25 @@
+Classify this inbound email reply to a cold outreach email.
+
+Reply text:
+{reply_text}
+
+Original outreach subject:
+{original_subject}
+
+Classifications (pick exactly one):
+- interested: the lead wants to learn more, schedule a call, or continue the conversation
+- not_now: the lead is not ready now but open to future contact ("maybe later", "try again in Q1")
+- not_interested: clear rejection, not interested at all
+- unsubscribe: explicitly asking to be removed from the list ("unsubscribe", "remove me", "stop emailing")
+- out_of_office: automated out-of-office reply
+- other: anything else (unclear, question, wrong person, etc.)
+
+For "interested" replies only, write a brief suggested response the sender can edit and use.
+The suggested response must: be 2-3 sentences, propose a specific next step (call/demo), be warm but professional.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "classification": "interested|not_now|not_interested|unsubscribe|out_of_office|other",
+  "confidence": 0.95,
+  "suggested_response": "Hi {first_name}, thanks for getting back to me! I'd love to schedule a quick 15-minute call..." // only for interested, else null
+}

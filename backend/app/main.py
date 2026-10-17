@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import check_database_connection, get_db, init_db
 from app.core.deps import get_current_user
-from app.routers import auth, brand, analytics, webhooks
+from app.routers import auth, brand, analytics, webhooks, icps, leads, campaigns, email_events
 from app.schemas.auth import UserResponse
 
 # Structured JSON logging
@@ -113,6 +113,12 @@ app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(brand.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
 app.include_router(webhooks.router, prefix=API_PREFIX)
+app.include_router(icps.router, prefix=API_PREFIX)
+app.include_router(campaigns.router, prefix=API_PREFIX)
+app.include_router(leads.router, prefix=API_PREFIX)
+app.include_router(leads.router)  # public /u/{token}
+app.include_router(email_events.router, prefix=API_PREFIX)
+app.include_router(email_events.router)  # public /webhooks/email and /webhooks/email/inbound
 
 
 # ─── /api/v1/auth/me convenience endpoint ───────────────────────────────────

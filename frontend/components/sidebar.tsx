@@ -36,9 +36,9 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/admin/dashboard", icon: <LayoutDashboard className="w-4 h-4" />, label: "Dashboard" },
-  { href: "/admin/leads", icon: <Users className="w-4 h-4" />, label: "Leads", comingIn: "Prompt 2" },
-  { href: "/admin/campaigns", icon: <Mail className="w-4 h-4" />, label: "Campaigns", comingIn: "Prompt 2" },
-  { href: "/admin/inbox", icon: <Inbox className="w-4 h-4" />, label: "Inbox", comingIn: "Prompt 2" },
+  { href: "/admin/leads", icon: <Users className="w-4 h-4" />, label: "Leads" },
+  { href: "/admin/campaigns", icon: <Mail className="w-4 h-4" />, label: "Campaigns" },
+  { href: "/admin/inbox", icon: <Inbox className="w-4 h-4" />, label: "Inbox" },
   { href: "/admin/calendar", icon: <CalendarDays className="w-4 h-4" />, label: "Content Calendar", comingIn: "Prompt 3" },
   { href: "/admin/ideas", icon: <Lightbulb className="w-4 h-4" />, label: "Ideas & Generator", comingIn: "Prompt 3" },
   { href: "/admin/video", icon: <Clapperboard className="w-4 h-4" />, label: "Video Studio", comingIn: "Prompt 3" },

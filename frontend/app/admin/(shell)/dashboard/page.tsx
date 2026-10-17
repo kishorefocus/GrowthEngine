@@ -1,6 +1,6 @@
 "use client";
 
-import { useAnalyticsOverview } from "@/lib/hooks";
+import { useAnalyticsOverview, useCampaigns } from "@/lib/hooks";
 import {
   BarChart,
   Bar,
@@ -19,8 +19,15 @@ import {
   RefreshCw,
   TrendingUp,
   Users,
+  AlertTriangle,
+  Send,
+  Eye,
+  MessageSquare,
+  XCircle,
+  ExternalLink,
 } from "lucide-react";
 import { clsx } from "clsx";
+import Link from "next/link";
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -137,11 +144,15 @@ function ChannelChart({ data, loading }: { data: ChannelData[]; loading: boolean
 
 export default function DashboardPage() {
   const { data, isLoading, error, refetch } = useAnalyticsOverview();
+  const { data: campaigns } = useCampaigns();
 
   const channelData: ChannelData[] = Object.entries(data?.channels || {}).map(([channel, visits]) => ({
     channel,
     visits: visits as number,
   }));
+
+  // Detect campaign health alerts
+  const pausedCampaigns = campaigns?.filter((c) => c.status === "paused") || [];
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -149,7 +160,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-white">Dashboard</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Overview of your growth channels</p>
+          <p className="text-sm text-slate-500 mt-0.5">Overview of your growth engine and outreach</p>
         </div>
         <button
           onClick={() => refetch()}
@@ -160,6 +171,29 @@ export default function DashboardPage() {
           Refresh
         </button>
       </div>
+
+      {/* Campaign Health Alerts */}
+      {pausedCampaigns.length > 0 && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 flex items-start justify-between gap-3 text-xs">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+            <div>
+              <p className="font-semibold text-white">Campaign Safety Alert</p>
+              <p className="mt-0.5 text-amber-200/80">
+                {pausedCampaigns.length === 1
+                  ? `Campaign "${pausedCampaigns[0].name}" is paused. Auto-paused if bounce rate > 5% or complaint rate > 0.3%.`
+                  : `${pausedCampaigns.length} campaigns are currently paused.`}
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/admin/campaigns"
+            className="flex items-center gap-1 font-semibold text-white bg-amber-500/20 px-3 py-1.5 rounded-lg hover:bg-amber-500/30 transition-all shrink-0"
+          >
+            Review Campaigns <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
+      )}
 
       {/* Error state */}
       {error && !isLoading && (
@@ -201,40 +235,68 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Charts row */}
+      {/* Outreach Health & Channel Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Channel attribution chart */}
         <div className="lg:col-span-2 p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-white">Channel Attribution (Visits)</h3>
-            <span className="text-xs text-slate-500">UTM source</span>
+            <span className="text-xs text-slate-500">UTM source attribution</span>
           </div>
           <ChannelChart data={channelData} loading={isLoading} />
         </div>
 
-        {/* Today's tasks placeholder */}
-        <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-slate-400" />
-            Today's Tasks
-          </h3>
-          <div className="space-y-2">
-            {[
-              { label: "Review approval queue", done: false },
-              { label: "Check email bounce rate", done: false },
-              { label: "Schedule social posts", done: false },
-            ].map((task) => (
-              <div key={task.label} className="flex items-center gap-2.5 py-2 border-b border-white/[0.04] last:border-0">
-                <CheckCircle2 className={clsx("w-4 h-4 shrink-0", task.done ? "text-emerald-400" : "text-slate-700")} />
-                <span className={clsx("text-xs", task.done ? "text-slate-500 line-through" : "text-slate-300")}>
-                  {task.label}
+        {/* Email Outreach Performance summary */}
+        <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Send className="w-4 h-4 text-violet-400" />
+                Email Deliverability
+              </h3>
+              <Link href="/admin/campaigns" className="text-xs text-violet-400 hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Total Sent</span>
+                <span className="font-mono text-white font-semibold">
+                  {data?.email.sent.toLocaleString() ?? 0}
                 </span>
               </div>
-            ))}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Total Scheduled</span>
+                <span className="font-mono text-emerald-400 font-semibold">
+                  {data?.email.total_scheduled.toLocaleString() ?? 0}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Reply Rate</span>
+                <span className="font-mono text-white font-semibold">
+                  {data?.email.reply_rate_pct ?? 0}%
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Bounce Rate</span>
+                <span className={clsx(
+                  "font-mono font-semibold",
+                  (data?.email.bounce_rate_pct ?? 0) > 5 ? "text-rose-400" : "text-slate-300"
+                )}>
+                  {data?.email.bounce_rate_pct ?? 0}%
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="mt-4 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/10">
-            <p className="text-xs text-emerald-400 font-medium">Approval queue</p>
-            <p className="text-xs text-slate-500 mt-1">No items pending approval.</p>
+
+          <div className="mt-4 pt-3 border-t border-white/[0.04]">
+            <Link
+              href="/admin/inbox"
+              className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-slate-300 transition-all"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+              Open Prospect Inbox
+            </Link>
           </div>
         </div>
       </div>

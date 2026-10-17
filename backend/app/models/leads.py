@@ -1,6 +1,6 @@
 """Leads & Outreach models: icps, leads, suppression_list, campaigns, sequences, email_messages, replies"""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -39,6 +39,8 @@ class Lead(UUIDMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="new"
     )  # new|queued|contacted|replied|signed_up|bounced|unsubscribed
+    lawful_basis: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, default="legitimate_interest_b2b")
+    # GDPR: lawful basis for processing. "legitimate_interest_b2b" for B2B cold outreach.
 
 
 class SuppressionList(UUIDMixin, TimestampMixin, Base):
@@ -47,7 +49,11 @@ class SuppressionList(UUIDMixin, TimestampMixin, Base):
 
     email_or_domain: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
 
 
 class Campaign(UUIDMixin, TimestampMixin, Base):
@@ -100,4 +106,6 @@ class Reply(UUIDMixin, TimestampMixin, Base):
     classification: Mapped[str] = mapped_column(
         String(30), nullable=False, default="other"
     )  # interested|not_now|not_interested|unsubscribe|out_of_office|other
+    confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
+    suggested_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     handled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

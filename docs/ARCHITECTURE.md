@@ -185,6 +185,9 @@ Every table has `id` (UUID), `created_at`, `updated_at`.
 - **Official APIs only** — no browser bots, no scraping LinkedIn, no automated DMs to strangers
 - **Social posting** via official APIs: X API, LinkedIn Posts API, Meta Graph API, YouTube Data API — all through human approval queue
 - **Cold outreach** is email only, with unsubscribe link, physical address, honest sender identity, and suppression enforcement (CAN-SPAM, GDPR, CASL)
+- **Email Unsubscribe**: Signed URL-safe HMAC tokens (`UNSUBSCRIBE_SECRET` via `itsdangerous`), public `GET /u/{token}` endpoint, automatic suppression, and header inclusion (`List-Unsubscribe`, `List-Unsubscribe-Post`)
+- **Automated Safety Monitoring**: Background worker checks health every 15 min; auto-pauses any campaign exceeding 5.0% bounce rate or 0.3% complaint rate with audit logging
+- **Sequence Stop Rules**: Sequences stop advancing immediately when a lead replies, bounces, unsubscribes, or signs up
 - **Product Hunt, G2, Capterra** — no public posting APIs; app provides checklists and assets; human submits
 - **Reddit and IndieHackers** — posts drafted, posted manually
 - **Human in the loop everywhere** — AI drafts, owner approves, system schedules

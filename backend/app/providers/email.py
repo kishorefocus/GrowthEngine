@@ -21,6 +21,7 @@ class EmailMessage:
     from_name: str = "GlobalReach"
     reply_to: Optional[str] = None
     tracking_token: Optional[str] = None
+    headers: Optional[dict[str, str]] = None
 
 
 @dataclass

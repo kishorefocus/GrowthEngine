@@ -66,20 +66,23 @@
 
 ---
 
-## Prompt 2 — Leads & Email (TODO)
+## Prompt 2 — Leads & Email ✅
 
-- [ ] Lead import (CSV, GlobalReach API via dogfooding)
-- [ ] ICP builder UI
-- [ ] Email verification (MX check, disposable domains)
-- [ ] Suppression list UI (import, export, search, remove with audit)
-- [ ] Campaign builder (sequences, steps, delays)
-- [ ] ARQ job: `send_campaign_emails` (respects daily_limit, sending_window, suppression)
-- [ ] ARQ job: `process_replies` (AI classification → interested/unsubscribe/etc.)
-- [ ] Inbox page with AI reply suggestions
-- [ ] Team invite (owner → editor)
-- [ ] Google OAuth full implementation
-- [ ] Unsubscribe landing page at `/unsubscribe?token=...`
-- [ ] Email footer with physical address and unsubscribe link
+- [x] Lead import (CSV with column mapping, GlobalReach API via dogfooding)
+- [x] ICP builder UI (CRUD with industry, geography, company size, titles, keywords)
+- [x] Email verification (syntax, MX check, disposable domain blocklist, role account detection)
+- [x] Suppression list UI (import, export, search, remove with audit, pre-send enforcement)
+- [x] Campaign builder (sequences, steps, delays, spam-score heuristic)
+- [x] AI Personalization with Claude 3.5 Sonnet, claims guard check, and live preview
+- [x] ARQ worker: `send_due_emails` (respects daily_limit, sending_window in recipient tz, jitter, suppression)
+- [x] ARQ worker: `check_campaign_health` (auto-pauses on >5% bounce or >0.3% complaint)
+- [x] Inbound webhook & reply classification (`reply_classify` → interested/not_now/unsubscribe/etc.)
+- [x] Inbox page with AI reply suggestions and 1-click handle/suppress actions
+- [x] Unsubscribe handler (`GET /u/{token}`) with signed HMAC tokens & confirmation page
+- [x] Compliant footer with physical address, one-click unsubscribe, and List-Unsubscribe headers
+- [x] Sending Domain Health (SPF, DKIM, DMARC DNS resolution) & 6-week warm-up ramp card
+- [x] Pytest suite (28/28 passed) covering suppression, stop rules, daily limits, auto-pause, tokens, and webhooks
+
 
 ---
 

@@ -8,10 +8,18 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-from app.main import app
+from app.main import app as fastapi_app
 from app.core.database import get_db
 from app.models.base import Base
 import app.models  # noqa: register all models
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+
+
+@compiles(JSONB, "sqlite")
+def compile_jsonb_sqlite(type_, compiler, **kw):
+    return "JSON"
+
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -38,7 +46,7 @@ async def test_db():
 
 @pytest_asyncio.fixture(scope="function")
 async def client(test_db):
-    app.dependency_overrides[get_db] = lambda: test_db
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    fastapi_app.dependency_overrides[get_db] = lambda: test_db
+    async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()

@@ -61,7 +61,9 @@ async def register(
     password_hash = ph.hash(payload.password)
     role = "owner"  # First user is always owner
 
+    user_id = uuid.uuid4()
     user = User(
+        id=user_id,
         email=payload.email,
         password_hash=password_hash,
         role=role,
@@ -69,8 +71,8 @@ async def register(
     db.add(user)
 
     # Create tokens
-    access_token = create_access_token(str(user.id), role)
-    refresh_token, refresh_expires = create_refresh_token(str(user.id))
+    access_token = create_access_token(str(user_id), role)
+    refresh_token, refresh_expires = create_refresh_token(str(user_id))
     user.refresh_token_hash = hash_refresh_token(refresh_token)
     user.refresh_token_expires_at = refresh_expires
 
@@ -124,7 +126,11 @@ async def refresh(
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token.")
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    try:
+        uid = uuid.UUID(user_id) if user_id else None
+    except (ValueError, TypeError):
+        uid = None
+    result = await db.execute(select(User).where(User.id == uid))
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active:
@@ -137,8 +143,13 @@ async def refresh(
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token reuse detected. Please log in again.")
 
-    if user.refresh_token_expires_at and user.refresh_token_expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired.")
+    if user.refresh_token_expires_at:
+        exp = user.refresh_token_expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired.")
+
 
     # Issue new pair
     access_token = create_access_token(str(user.id), user.role)
@@ -162,15 +173,14 @@ async def google_callback(code: str, state: str = "", db: AsyncSession = Depends
     )
 
 
+from app.core.deps import get_current_user
+
+
 @router.get("/me", response_model=UserResponse)
-async def me(db: AsyncSession = Depends(get_db)):
+async def me(current_user: User = Depends(get_current_user)):
     """
     Get current user info.
     Protected via JWT — requires valid access token.
-    Note: the actual user extraction is done in deps.get_current_user.
-    This endpoint is a convenience alias.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Use /auth/me with Bearer token. Implemented in main.py router.",
-    )
+    return UserResponse(id=str(current_user.id), email=current_user.email, role=current_user.role)
+
