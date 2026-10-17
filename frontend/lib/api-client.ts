@@ -460,3 +460,199 @@ export const healthApi = {
       .catch(() => null),
 };
 
+// ─── Prompt 3 Interfaces ───────────────────────────────────────────────────
+
+export interface SocialAccount {
+  id: string;
+  platform: "x" | "linkedin" | "instagram" | "facebook" | "youtube";
+  handle?: string;
+  external_id?: string;
+  status: "active" | "expired" | "revoked";
+  expires_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContentIdea {
+  id: string;
+  topic: string;
+  pillar?: "how-to" | "build-in-public" | "competitor_alternatives" | "industry_lead_lists" | "tips_and_stats";
+  source: "ai" | "manual" | "seo_gap";
+  status: "draft" | "approved" | "archived";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Post {
+  id: string;
+  idea_id?: string;
+  platform: "x" | "linkedin" | "instagram" | "facebook" | "youtube";
+  body?: string;
+  media_urls?: string[];
+  link_url?: string;
+  utm?: Record<string, string>;
+  status: "draft" | "pending_approval" | "approved" | "scheduled" | "published" | "failed" | "rejected";
+  scheduled_at?: string;
+  published_at?: string;
+  external_post_id?: string;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VideoProject {
+  id: string;
+  title: string;
+  target_keyword?: string;
+  script?: string;
+  shot_list?: Array<{ step_number: number; screen: string; action: string; voiceover_cue: string }>;
+  caption?: string;
+  youtube_title?: string;
+  youtube_description?: string;
+  tags?: string[];
+  thumbnail_prompt?: string;
+  status: "draft" | "planned" | "recorded" | "published";
+  asset_url?: string;
+  youtube_video_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CalendarItem {
+  id: string;
+  type: string;
+  platform: string;
+  title: string;
+  body: string;
+  status: string;
+  scheduled_at: string;
+  published_at?: string;
+}
+
+export interface CalendarFeedResponse {
+  items: CalendarItem[];
+  best_time_suggestions: Record<string, string[]>;
+}
+
+export interface CrossPostCaptionsResponse {
+  video_id: string;
+  instagram_reels: string;
+  facebook_reels: string;
+  linkedin_video: string;
+}
+
+// ─── Prompt 3 APIs ─────────────────────────────────────────────────────────
+
+export const connectionsApi = {
+  list: () => apiFetch<SocialAccount[]>("/connections"),
+  getAuthorizeUrl: (platform: string) =>
+    apiFetch<{ platform: string; authorization_url: string; state: string }>(`/connections/${platform}/authorize`),
+  connectMock: (platform: string, handle: string) =>
+    apiFetch<SocialAccount>(`/connections/connect-mock?platform=${platform}&handle=${encodeURIComponent(handle)}`, {
+      method: "POST",
+    }),
+  disconnect: (id: string) =>
+    apiFetch<void>(`/connections/${id}`, { method: "DELETE" }),
+};
+
+export const ideasApi = {
+  list: (params?: { pillar?: string; status?: string; source?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.pillar) sp.set("pillar", params.pillar);
+    if (params?.status) sp.set("status", params.status);
+    if (params?.source) sp.set("source", params.source);
+    const qs = sp.toString() ? `?${sp.toString()}` : "";
+    return apiFetch<ContentIdea[]>(`/ideas${qs}`);
+  },
+  create: (data: Partial<ContentIdea>) =>
+    apiFetch<ContentIdea>("/ideas", { method: "POST", body: JSON.stringify(data) }),
+  generateBatch: (count = 20, customPrompt?: string) =>
+    apiFetch<{ generated_count: number; ideas: ContentIdea[] }>("/ideas/generate", {
+      method: "POST",
+      body: JSON.stringify({ count, custom_prompt: customPrompt }),
+    }),
+  update: (id: string, data: Partial<ContentIdea>) =>
+    apiFetch<ContentIdea>(`/ideas/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    apiFetch<void>(`/ideas/${id}`, { method: "DELETE" }),
+};
+
+export const postsApi = {
+  list: (params?: { platform?: string; status?: string; idea_id?: string; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.platform) sp.set("platform", params.platform);
+    if (params?.status) sp.set("status", params.status);
+    if (params?.idea_id) sp.set("idea_id", params.idea_id);
+    if (params?.limit) sp.set("limit", String(params.limit));
+    const qs = sp.toString() ? `?${sp.toString()}` : "";
+    return apiFetch<Post[]>(`/posts${qs}`);
+  },
+  get: (id: string) => apiFetch<Post>(`/posts/${id}`),
+  create: (data: Partial<Post>) =>
+    apiFetch<Post>("/posts", { method: "POST", body: JSON.stringify(data) }),
+  generatePlatformPosts: (ideaId: string, platforms?: string[], linkUrl?: string) =>
+    apiFetch<{ idea_id: string; posts: Post[] }>("/posts/generate", {
+      method: "POST",
+      body: JSON.stringify({ idea_id: ideaId, platforms, link_url: linkUrl }),
+    }),
+  approve: (id: string, scheduledAt?: string) =>
+    apiFetch<Post>(`/posts/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ scheduled_at: scheduledAt }),
+    }),
+  reject: (id: string, reason?: string) =>
+    apiFetch<Post>(`/posts/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  reschedule: (id: string, scheduledAt: string) =>
+    apiFetch<Post>(`/posts/${id}/reschedule`, {
+      method: "POST",
+      body: JSON.stringify({ scheduled_at: scheduledAt }),
+    }),
+  retry: (id: string) =>
+    apiFetch<Post>(`/posts/${id}/retry`, { method: "POST" }),
+  update: (id: string, data: Partial<Post>) =>
+    apiFetch<Post>(`/posts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    apiFetch<void>(`/posts/${id}`, { method: "DELETE" }),
+};
+
+export const calendarApi = {
+  getFeed: (params?: { start_date?: string; end_date?: string; platform?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.start_date) sp.set("start_date", params.start_date);
+    if (params?.end_date) sp.set("end_date", params.end_date);
+    if (params?.platform) sp.set("platform", params.platform);
+    const qs = sp.toString() ? `?${sp.toString()}` : "";
+    return apiFetch<CalendarFeedResponse>(`/calendar${qs}`);
+  },
+};
+
+export const videoApi = {
+  list: (status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return apiFetch<VideoProject[]>(`/videos${qs}`);
+  },
+  get: (id: string) => apiFetch<VideoProject>(`/videos/${id}`),
+  plan: (targetKeyword: string, additionalNotes?: string) =>
+    apiFetch<VideoProject>("/videos/plan", {
+      method: "POST",
+      body: JSON.stringify({ target_keyword: targetKeyword, additional_notes: additionalNotes }),
+    }),
+  getUploadUrl: (id: string, filename = "video.mp4") =>
+    apiFetch<{ upload_url: string; public_url: string; key: string }>(
+      `/videos/${id}/upload-url?filename=${encodeURIComponent(filename)}`,
+      { method: "POST" }
+    ),
+  publishYouTube: (id: string) =>
+    apiFetch<VideoProject>(`/videos/${id}/publish-youtube`, { method: "POST" }),
+  crossPostCaptions: (id: string) =>
+    apiFetch<CrossPostCaptionsResponse>(`/videos/${id}/cross-post-captions`, { method: "POST" }),
+  update: (id: string, data: Partial<VideoProject>) =>
+    apiFetch<VideoProject>(`/videos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    apiFetch<void>(`/videos/${id}`, { method: "DELETE" }),
+};
+
+

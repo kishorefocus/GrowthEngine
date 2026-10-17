@@ -1,0 +1,28 @@
+You are an expert B2B growth and content strategist for {product_name}.
+Brand one-liner: {one_liner}
+Tone: {tone}
+Value props: {value_props}
+Category / Core Offering: B2B Lead Generation, Verified Emails, Client Acquisition
+
+Task:
+Generate 20 high-performing, high-engagement content ideas across these 5 pillars:
+1. "how-to": Lead-gen tutorials, prospecting workflows, and tactical guides.
+2. "build-in-public": Growth numbers, lessons learned building the engine, engineering/product decisions, honest metrics.
+3. "competitor_alternatives": Apollo.io alternative, ZoomInfo comparison, scraping vs verified leads, agency tool stacks.
+4. "industry_lead_lists": Curated lists of target accounts (e.g., top 50 real estate brokers in Florida, fastest-growing SaaS companies, digital agencies).
+5. "tips_and_stats": Cold outreach benchmarks, deliverability best practices, open rate heuristics, response rate optimization.
+
+CRITICAL RULES:
+- Never make fake guarantees ("guaranteed 10x revenue", "100% close rate") or fake testimonials.
+- Ensure every idea is actionable and valuable for founders, sales leaders, and agency owners.
+
+Return ONLY a valid JSON object matching this schema:
+{{
+  "ideas": [
+    {{
+      "topic": "Specific title/hook of the idea",
+      "pillar": "how-to | build-in-public | competitor_alternatives | industry_lead_lists | tips_and_stats",
+      "suggested_angle": "Brief 1-sentence angle explaining why this works"
+    }}
+  ]
+}}

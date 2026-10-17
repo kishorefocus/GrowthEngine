@@ -86,19 +86,36 @@
 
 ---
 
-## Prompt 3 — Social & Video (TODO)
+## Prompt 3 — Social & Video ✅
 
-- [ ] Social OAuth connections (X, LinkedIn, Meta, YouTube)
-- [ ] Content idea generator (AI + SEO gap analysis)
-- [ ] Post drafting with claims guard
-- [ ] Human approval queue
-- [ ] Scheduled publishing via ARQ
-- [ ] Content calendar UI (drag-and-drop)
-- [ ] Video project pipeline (keyword → script → shot list → caption)
-- [ ] YouTube upload via Data API
-- [ ] X Publisher (API v2 create_tweet)
-- [ ] LinkedIn Publisher (Posts API)
-- [ ] Meta Publisher (Graph API)
+- [x] Social OAuth connections (X, LinkedIn, Meta, YouTube) with Fernet encrypted tokens in `social_accounts`
+- [x] Content idea generator (`POST /ideas/generate`) across 5 pillars: how-to, build-in-public, competitor alternatives, industry lead lists, tips & stats
+- [x] Platform-adapted post drafting (`POST /posts/generate`) with `social_adapt` template:
+  - X: Hook + thread option (<280 chars per tweet)
+  - LinkedIn: 800–1,300 chars, line breaks, closing discussion question
+  - Instagram: Caption, 5–8 hashtags, carousel slide text, image prompt
+  - Facebook: Concise post with link
+- [x] Strict UTM link wrapping via `services/utm.py` and short links via `/r/{code}`
+- [x] `claims_guard` validation on all generated social text (no guarantees/fake testimonials)
+- [x] Human approval queue state machine (`draft` → `pending_approval` → `approved` → `scheduled` → `published` | `failed` | `rejected`) with `audit_log` entries
+- [x] Visual Content Calendar UI with week & month views, time rescheduling, and side-by-side platform preview mockups
+- [x] Best-time posting suggestions heuristic (starts with weekday morning heuristic, becomes data-driven with ≥30 posts)
+- [x] Video Studio pipeline (`POST /videos/plan`): keyword input, 60s Shorts script, 5–8m YouTube outline, screen-recording shot list, description with chapters & UTM, tags, thumbnail prompt
+- [x] Cloudflare R2 / S3 signed asset upload URLs (`POST /videos/{id}/upload-url`)
+- [x] YouTube Data API v3 publishing (`POST /videos/{id}/publish-youtube`, private until owner approves)
+- [x] Cross-post caption variants for Instagram Reels, Facebook Reels, and LinkedIn video
+- [x] Official publishers:
+  - `XPublisher`: API v2 (`POST /2/tweets`) with thread support
+  - `LinkedInPublisher`: Posts API for organization page
+  - `InstagramPublisher`: Graph API media container create + publish
+  - `FacebookPublisher`: Page feed API
+  - Rate limiting handling, backoff retries, error logging to `posts.error`, and `dry_run_guard`
+- [x] Background ARQ worker jobs:
+  - `publish_due_posts` (runs every 1 minute)
+  - `generate_weekly_content_batch` (Sunday 18:00)
+  - `refresh_social_tokens` (hourly token expiry check and refresh)
+- [x] Dashboard updates: wired "Items Awaiting Approval" card, social rows in Channel Attribution, and top posts
+- [x] Pytest suite (37/37 tests passed) covering UTM wrapping, length limits, approval state machine, backoff, tokens, and video pipeline
 
 ---
 

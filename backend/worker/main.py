@@ -10,6 +10,11 @@ from arq.connections import RedisSettings
 from app.core.config import settings
 from worker.jobs.analytics import sync_analytics_rollup
 from worker.jobs.email import check_campaign_health, process_email_events, send_due_emails
+from worker.jobs.social import (
+    generate_weekly_content_batch,
+    publish_due_posts,
+    refresh_social_tokens,
+)
 
 
 async def startup(ctx):
@@ -33,7 +38,10 @@ class WorkerSettings:
         send_due_emails,
         check_campaign_health,
         process_email_events,
-        # Prompt 3 will add: publish_scheduled_posts
+        # Prompt 3 jobs
+        publish_due_posts,
+        generate_weekly_content_batch,
+        refresh_social_tokens,
         # Prompt 4 will add: generate_seo_pages
     ]
 
@@ -41,6 +49,9 @@ class WorkerSettings:
         cron(sync_analytics_rollup, hour=2, minute=0),        # nightly at 2am UTC
         cron(send_due_emails, minute=None),                   # every 1 minute
         cron(check_campaign_health, minute={0, 15, 30, 45}),  # every 15 minutes
+        cron(publish_due_posts, minute=None),                 # every 1 minute
+        cron(generate_weekly_content_batch, weekday=6, hour=18, minute=0),  # Sunday 18:00
+        cron(refresh_social_tokens, minute=0),                # hourly
     ]
 
     on_startup = startup

@@ -182,13 +182,106 @@ def sign_payload(secret: str, body: bytes) -> str:
 
 ---
 
+## OAuth App Setup Guide (Prompt 3 — Social & Video)
+
+All OAuth redirect URIs point to:
+`https://<your-backend-api-domain>/api/v1/connections/{platform}/callback`
+(or `http://localhost:8000/api/v1/connections/{platform}/callback` for local development).
+
+Tokens are securely stored encrypted at rest with Fernet using `ENCRYPTION_KEY`.
+
+### 1. X (Twitter) Developer App
+1. Go to the [X Developer Portal](https://developer.x.com/en/portal/dashboard) and create a Project & App.
+2. Under your App Settings, click **Set up** under **User authentication settings**.
+3. **App permissions**: Select **Read and write**.
+4. **Type of App**: Select **Web App, Automated App or Bot (Confidential Client)**.
+5. **App info**:
+   - **Callback URI / Redirect URL**: `https://<api-domain>/api/v1/connections/x/callback`
+   - **Website URL**: `https://getyourclientsb2b.com`
+6. Save your **Client ID** and **Client Secret**.
+7. Set in `backend/.env`:
+   ```bash
+   X_CLIENT_ID=your_client_id
+   X_CLIENT_SECRET=your_client_secret
+   ```
+   *Required OAuth 2.0 Scopes (handled automatically): `tweet.read`, `tweet.write`, `users.read`, `offline.access`.*
+
+---
+
+### 2. LinkedIn (Organization Page Publishing)
+1. Go to the [LinkedIn Developer Portal](https://www.linkedin.com/developers/apps) and click **Create App**.
+2. **Associate your LinkedIn Page**: Link your GlobalReach organization page (requires admin verification of the page via a generated URL).
+3. Under the **Products** tab, request access to:
+   - **Share on LinkedIn** (basic sharing)
+   - **Sign In with LinkedIn using OpenID Connect** (profile details)
+   - **Community Management API** or **Marketing Developer Platform** (needed for Organization Page publishing permissions: `w_organization_social`, `r_organization_social`).
+   *Note: LinkedIn requires organization admin approval and developer review for company page posting permissions.*
+4. Under the **Auth** tab, add your **Authorized redirect URLs for your app**:
+   - `https://<api-domain>/api/v1/connections/linkedin/callback`
+5. Set in `backend/.env`:
+   ```bash
+   LINKEDIN_CLIENT_ID=your_client_id
+   LINKEDIN_CLIENT_SECRET=your_client_secret
+   ```
+
+---
+
+### 3. Meta for Developers (Instagram Business & Facebook Page)
+1. Go to [Meta for Developers](https://developers.facebook.com/) and create a new App (type: **Business**).
+2. **Prerequisites**:
+   - Create a Facebook Business Page for GlobalReach.
+   - Switch your Instagram account to a Professional/Business account.
+   - In Instagram account settings, link your Instagram Business Account to the Facebook Page.
+3. In your Meta App Dashboard, add the **Facebook Login for Business** product.
+4. Under **Facebook Login Settings**, add **Valid OAuth Redirect URIs**:
+   - `https://<api-domain>/api/v1/connections/meta/callback`
+5. **Permissions & App Review**:
+   - Development Mode allows app admins/testers to publish immediately without review.
+   - For production launch, request App Review for:
+     - `pages_show_list`
+     - `pages_read_engagement`
+     - `pages_manage_posts` (Facebook Page posting)
+     - `instagram_basic`
+     - `instagram_content_publish` (Instagram media container creation and publishing)
+6. Set in `backend/.env`:
+   ```bash
+   META_CLIENT_ID=your_facebook_app_id
+   META_CLIENT_SECRET=your_facebook_app_secret
+   ```
+
+---
+
+### 4. Google Cloud Console (YouTube Data API v3)
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and create a new project (e.g. `globalreach-growth-engine`).
+2. Navigate to **APIs & Services > Library**, search for **YouTube Data API v3**, and click **Enable**.
+3. Navigate to **APIs & Services > OAuth consent screen**:
+   - Choose User Type: **External** (or Internal for Google Workspace).
+   - Add App name, User support email, and Developer contact information.
+   - Under **Scopes**, add:
+     - `https://www.googleapis.com/auth/youtube.upload`
+     - `https://www.googleapis.com/auth/youtube.readonly`
+4. Navigate to **APIs & Services > Credentials** > **Create Credentials** > **OAuth client ID**:
+   - Application type: **Web application**.
+   - Name: `GlobalReach Growth Engine`.
+   - **Authorized redirect URIs**:
+     - `https://<api-domain>/api/v1/connections/google/callback`
+5. Save your **Client ID** and **Client Secret**.
+6. Set in `backend/.env`:
+   ```bash
+   GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=your_client_secret
+   ```
+   *Note: Videos uploaded via the API default to `privacyStatus: private` until approved and vetted by the channel owner.*
+
+---
+
 ## Build Roadmap
 
 | Prompt | Scope | Status |
 |---|---|---|
 | 1 — Foundation | Schema, auth, analytics, admin shell, dashboard | ✅ Done |
-| 2 — Leads & Email | Lead engine, verification, campaigns, scheduler, inbox | ⏳ Next |
-| 3 — Social & Video | Content studio, publishers, calendar, video, connections | ⏳ Pending |
-| 4 — SEO & Launch | Programmatic SEO, free tools, launch hub, hardening | ⏳ Pending |
+| 2 — Leads & Email | Lead engine, verification, campaigns, scheduler, inbox | ✅ Done |
+| 3 — Social & Video | Content studio, publishers, calendar, video, connections | ✅ Done |
+| 4 — SEO & Launch | Programmatic SEO, free tools, launch hub, hardening | ⏳ Next |
 
 See [`docs/PROGRESS.md`](docs/PROGRESS.md) for detailed checklists.

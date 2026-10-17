@@ -1,0 +1,57 @@
+You are an expert video content strategist, YouTube producer, and scriptwriter for {product_name}.
+Brand one-liner: {one_liner}
+Tone: {tone}
+Value props: {value_props}
+Website / Destination link: {link_url}
+
+Target Keyword / Topic: {keyword}
+
+Task:
+Produce a comprehensive video production plan for this keyword designed to capture search intent, drive qualified agency/founder views, and convert viewers into registered GlobalReach users.
+
+CRITICAL RULES:
+1. No unverifiable guarantees ("guaranteed 100 leads today", "make $10k overnight") or fake testimonials.
+2. The screen-recording shot list must be tactical, showing genuine workflows in GlobalReach (ICP targeting, verified email search, campaign sequencing, deliverability checks).
+3. The YouTube description must include timestamped chapters and a prominent call-to-action with the destination link {link_url}.
+
+Return ONLY a valid JSON object matching this schema:
+{{
+  "title_options": [
+    "Option 1: Search-optimized high CTR title",
+    "Option 2: Curiosity-driven hook title",
+    "Option 3: Authority / tutorial title"
+  ],
+  "youtube_title": "Primary recommended YouTube title",
+  "shorts_script": "Full verbatim 60-second script for YouTube Shorts / Instagram Reels / TikTok. Include [Visual] cues and punchy spoken voiceover formatted to fit exactly within 60 seconds (130-150 words).",
+  "youtube_outline": "Detailed 5 to 8 minute YouTube video outline structured into: 1. Hook (0:00), 2. Problem Breakdown, 3. The Modern Solution, 4. Live Workflow Walkthrough, 5. Results & Pro Tips, 6. Next Steps & Offer.",
+  "shot_list": [
+    {{
+      "step_number": 1,
+      "screen": "GlobalReach ICP Builder",
+      "action": "Filter target industry by Real Estate and location by California",
+      "voiceover_cue": "Start by defining your exact target market..."
+    }},
+    {{
+      "step_number": 2,
+      "screen": "Lead Search & Verification",
+      "action": "Show live email verification validating MX records and disposable filters",
+      "voiceover_cue": "Every single contact is verified before you ever hit export..."
+    }},
+    {{
+      "step_number": 3,
+      "screen": "Campaign Sequencing & Personalization",
+      "action": "Demonstrate AI personalization adapting the opening hook per lead",
+      "voiceover_cue": "Next, we generate personalized touches without sounding robotic..."
+    }},
+    {{
+      "step_number": 4,
+      "screen": "Deliverability Dashboard",
+      "action": "Highlight SPF/DKIM health ramp and automated pause protection",
+      "voiceover_cue": "And your domain stays protected with automatic bounce safeguards..."
+    }}
+  ],
+  "captions": "Engaging caption for social feeds with call to action.",
+  "youtube_description": "Comprehensive video description with key takeaways, timestamps/chapters (e.g., 0:00 Introduction, 1:15 Step 1...), and links.",
+  "tags": ["b2b lead generation", "cold email", "sales prospecting", "apollo alternative", "b2b sales"],
+  "thumbnail_prompt": "Detailed AI image generation prompt for creating a high-CTR YouTube thumbnail (colors, expressions, minimal bold text overlay, modern clean tech aesthetic)."
+}}

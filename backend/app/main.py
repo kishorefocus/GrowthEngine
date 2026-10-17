@@ -17,7 +17,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import check_database_connection, get_db, init_db
 from app.core.deps import get_current_user
-from app.routers import auth, brand, analytics, webhooks, icps, leads, campaigns, email_events
+from app.routers import (
+    analytics,
+    auth,
+    brand,
+    campaigns,
+    connections,
+    email_events,
+    icps,
+    ideas,
+    leads,
+    posts,
+    videos,
+    webhooks,
+)
 from app.schemas.auth import UserResponse
 
 # Structured JSON logging
@@ -112,6 +125,7 @@ API_PREFIX = settings.api_prefix  # /api/v1
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(brand.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
+app.include_router(analytics.router)  # public /r/{code} at root
 app.include_router(webhooks.router, prefix=API_PREFIX)
 app.include_router(icps.router, prefix=API_PREFIX)
 app.include_router(campaigns.router, prefix=API_PREFIX)
@@ -119,6 +133,11 @@ app.include_router(leads.router, prefix=API_PREFIX)
 app.include_router(leads.router)  # public /u/{token}
 app.include_router(email_events.router, prefix=API_PREFIX)
 app.include_router(email_events.router)  # public /webhooks/email and /webhooks/email/inbound
+# Prompt 3 routers
+app.include_router(connections.router, prefix=API_PREFIX)
+app.include_router(ideas.router, prefix=API_PREFIX)
+app.include_router(posts.router, prefix=API_PREFIX)
+app.include_router(videos.router, prefix=API_PREFIX)
 
 
 # ─── /api/v1/auth/me convenience endpoint ───────────────────────────────────

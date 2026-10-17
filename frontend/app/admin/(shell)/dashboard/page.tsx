@@ -1,6 +1,6 @@
 "use client";
 
-import { useAnalyticsOverview, useCampaigns } from "@/lib/hooks";
+import { useAnalyticsOverview, useCampaigns, usePosts } from "@/lib/hooks";
 import {
   BarChart,
   Bar,
@@ -25,6 +25,8 @@ import {
   MessageSquare,
   XCircle,
   ExternalLink,
+  CheckSquare,
+  Share2,
 } from "lucide-react";
 import { clsx } from "clsx";
 import Link from "next/link";
@@ -145,6 +147,9 @@ function ChannelChart({ data, loading }: { data: ChannelData[]; loading: boolean
 export default function DashboardPage() {
   const { data, isLoading, error, refetch } = useAnalyticsOverview();
   const { data: campaigns } = useCampaigns();
+  const { data: pendingPosts } = usePosts({ status: "pending_approval" });
+
+  const pendingCount = pendingPosts?.length || 0;
 
   const channelData: ChannelData[] = Object.entries(data?.channels || {}).map(([channel, visits]) => ({
     channel,
@@ -171,6 +176,27 @@ export default function DashboardPage() {
           Refresh
         </button>
       </div>
+
+      {/* Items Awaiting Approval Banner */}
+      {pendingCount > 0 && (
+        <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/25 text-violet-200 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <CheckSquare className="w-4 h-4 text-violet-400 shrink-0" />
+            <div>
+              <p className="font-semibold text-white">Items Awaiting Approval</p>
+              <p className="mt-0.5 text-violet-200/80">
+                {pendingCount} social post {pendingCount === 1 ? "draft is" : "drafts are"} queued for your human review before publishing.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/admin/calendar"
+            className="flex items-center gap-1 font-semibold text-white bg-violet-600 px-3 py-1.5 rounded-lg hover:bg-violet-500 transition-all shrink-0"
+          >
+            Review Approval Queue <ArrowUpRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Campaign Health Alerts */}
       {pausedCampaigns.length > 0 && (
@@ -203,7 +229,7 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
           label="Total Visits"
           value={data?.overview.total_visits.toLocaleString() ?? "—"}
@@ -226,6 +252,14 @@ export default function DashboardPage() {
           loading={isLoading}
         />
         <KpiCard
+          label="Awaiting Approval"
+          value={pendingCount}
+          subLabel="Social review queue"
+          icon={<CheckSquare className="w-4 h-4" />}
+          color="bg-purple-500/15 text-purple-400"
+          loading={isLoading}
+        />
+        <KpiCard
           label="Emails Sent"
           value={data?.email.sent.toLocaleString() ?? "—"}
           subLabel={data ? `Reply ${data.email.reply_rate_pct}% · Bounce ${data.email.bounce_rate_pct}%` : undefined}
@@ -238,12 +272,29 @@ export default function DashboardPage() {
       {/* Outreach Health & Channel Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Channel attribution chart */}
-        <div className="lg:col-span-2 p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-white">Channel Attribution (Visits)</h3>
-            <span className="text-xs text-slate-500">UTM source attribution</span>
+        <div className="lg:col-span-2 p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white">Channel Attribution (Visits)</h3>
+              <span className="text-xs text-slate-500">UTM source attribution</span>
+            </div>
+            <ChannelChart data={channelData} loading={isLoading} />
           </div>
-          <ChannelChart data={channelData} loading={isLoading} />
+
+          {/* Social Channels Breakdown Rows */}
+          <div className="mt-4 pt-3 border-t border-white/[0.04] flex flex-wrap items-center gap-4 text-xs">
+            <span className="text-slate-500 text-[11px] font-medium">Social attribution:</span>
+            {["x", "linkedin", "instagram", "facebook", "youtube"].map((sc) => {
+              const visits = data?.channels?.[sc] || 0;
+              return (
+                <div key={sc} className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHANNEL_COLORS[sc] }} />
+                  <span className="capitalize text-slate-400">{sc}:</span>
+                  <span className="font-mono text-white font-medium">{visits}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Email Outreach Performance summary */}

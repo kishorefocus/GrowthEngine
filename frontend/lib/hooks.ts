@@ -432,4 +432,269 @@ export function useSuppressReply() {
   });
 }
 
+// ─── Prompt 3 Query Keys & Hooks ─────────────────────────────────────────────
+
+import {
+  calendarApi,
+  connectionsApi,
+  ideasApi,
+  postsApi,
+  videoApi,
+  ContentIdea,
+  Post,
+  VideoProject,
+} from "./api-client";
+
+export const prompt3Keys = {
+  connections: ["connections"] as const,
+  ideas: (params?: any) => ["ideas", params] as const,
+  posts: (params?: any) => ["posts", params] as const,
+  calendar: (params?: any) => ["calendar", params] as const,
+  videos: (status?: string) => ["videos", status] as const,
+  video: (id: string) => ["video", id] as const,
+};
+
+// ─── Connections Hooks ───────────────────────────────────────────────────────
+
+export function useConnections() {
+  return useQuery({
+    queryKey: prompt3Keys.connections,
+    queryFn: connectionsApi.list,
+  });
+}
+
+export function useConnectMock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ platform, handle }: { platform: string; handle: string }) =>
+      connectionsApi.connectMock(platform, handle),
+    onSuccess: () => qc.invalidateQueries({ queryKey: prompt3Keys.connections }),
+  });
+}
+
+export function useDisconnectAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => connectionsApi.disconnect(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: prompt3Keys.connections }),
+  });
+}
+
+// ─── Ideas Hooks ─────────────────────────────────────────────────────────────
+
+export function useIdeas(params?: { pillar?: string; status?: string; source?: string }) {
+  return useQuery({
+    queryKey: prompt3Keys.ideas(params),
+    queryFn: () => ideasApi.list(params),
+  });
+}
+
+export function useCreateIdea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<ContentIdea>) => ideasApi.create(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ideas"] }),
+  });
+}
+
+export function useGenerateIdeasBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ count, customPrompt }: { count?: number; customPrompt?: string }) =>
+      ideasApi.generateBatch(count, customPrompt),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ideas"] }),
+  });
+}
+
+export function useUpdateIdea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ContentIdea> }) =>
+      ideasApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ideas"] }),
+  });
+}
+
+export function useDeleteIdea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => ideasApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ideas"] }),
+  });
+}
+
+// ─── Posts Hooks ─────────────────────────────────────────────────────────────
+
+export function usePosts(params?: { platform?: string; status?: string; idea_id?: string; limit?: number }) {
+  return useQuery({
+    queryKey: prompt3Keys.posts(params),
+    queryFn: () => postsApi.list(params),
+  });
+}
+
+export function useCreatePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Post>) => postsApi.create(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+export function useGeneratePlatformPosts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ideaId, platforms, linkUrl }: { ideaId: string; platforms?: string[]; linkUrl?: string }) =>
+      postsApi.generatePlatformPosts(ideaId, platforms, linkUrl),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+      qc.invalidateQueries({ queryKey: queryKeys.analyticsOverview });
+    },
+  });
+}
+
+export function useApprovePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, scheduledAt }: { id: string; scheduledAt?: string }) =>
+      postsApi.approve(id, scheduledAt),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+      qc.invalidateQueries({ queryKey: queryKeys.analyticsOverview });
+    },
+  });
+}
+
+export function useRejectPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      postsApi.reject(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+      qc.invalidateQueries({ queryKey: queryKeys.analyticsOverview });
+    },
+  });
+}
+
+export function useReschedulePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, scheduledAt }: { id: string; scheduledAt: string }) =>
+      postsApi.reschedule(id, scheduledAt),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+export function useRetryPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => postsApi.retry(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+export function useUpdatePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Post> }) =>
+      postsApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+export function useDeletePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => postsApi.delete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+      qc.invalidateQueries({ queryKey: queryKeys.analyticsOverview });
+    },
+  });
+}
+
+// ─── Calendar Hooks ──────────────────────────────────────────────────────────
+
+export function useCalendarFeed(params?: { start_date?: string; end_date?: string; platform?: string }) {
+  return useQuery({
+    queryKey: prompt3Keys.calendar(params),
+    queryFn: () => calendarApi.getFeed(params),
+  });
+}
+
+// ─── Video Studio Hooks ──────────────────────────────────────────────────────
+
+export function useVideos(status?: string) {
+  return useQuery({
+    queryKey: prompt3Keys.videos(status),
+    queryFn: () => videoApi.list(status),
+  });
+}
+
+export function useVideo(id: string) {
+  return useQuery({
+    queryKey: prompt3Keys.video(id),
+    queryFn: () => videoApi.get(id),
+    enabled: !!id,
+  });
+}
+
+export function usePlanVideo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ targetKeyword, additionalNotes }: { targetKeyword: string; additionalNotes?: string }) =>
+      videoApi.plan(targetKeyword, additionalNotes),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
+  });
+}
+
+export function useUploadVideoAsset() {
+  return useMutation({
+    mutationFn: ({ id, filename }: { id: string; filename?: string }) =>
+      videoApi.getUploadUrl(id, filename),
+  });
+}
+
+export function usePublishYouTube() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => videoApi.publishYouTube(id),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ["videos"] });
+      qc.invalidateQueries({ queryKey: prompt3Keys.video(id) });
+    },
+  });
+}
+
+export function useCrossPostCaptions() {
+  return useMutation({
+    mutationFn: (id: string) => videoApi.crossPostCaptions(id),
+  });
+}
+
+export function useDeleteVideo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => videoApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["videos"] }),
+  });
+}
+
+
 
