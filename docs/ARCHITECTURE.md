@@ -25,26 +25,33 @@
 
 ```
 GrowthEngine/
-  frontend/                    # Next.js (Vercel)
+  frontend/                    # Next.js 14 (Vercel)
     app/
-      admin/                   # Protected admin app (auth-gated via middleware)
-        dashboard/
-        settings/
-        leads/          → Prompt 2
-        campaigns/      → Prompt 2
-        inbox/          → Prompt 2
-        calendar/       → Prompt 3
-        ideas/          → Prompt 3
-        video/          → Prompt 3
-        connections/    → Prompt 3
-        seo/            → Prompt 4
-        launch/         → Prompt 4
-      login/
-      register/
-    components/                # Sidebar, TopBar, ComingSoon
+      (public)/                # Public programmatic SEO & Free Lead-Magnet Tools
+        find-leads/[industry]/[city]/page.tsx
+        alternatives/[competitor]/[niche]/page.tsx
+        use-cases/[slug]/page.tsx
+        tools/subject-line-grader/page.tsx
+        tools/email-verifier/page.tsx
+        layout.tsx
+      admin/                   # Protected admin shell (auth-gated via middleware)
+        dashboard/             # High-level KPIs, channel attribution, health alerts
+        leads/                 # Lead search, CSV import, ICP builder, suppression
+        campaigns/             # Sequences, step builder, spam score, AI preview
+        inbox/                 # Prospect replies, intent classification, quick replies
+        calendar/              # Visual content calendar, approval queue with mockups
+        ideas/                 # 5-pillar idea generator (20 batch) & platform drafts
+        video/                 # Keyword video planning, R2 upload, YouTube publish
+        connections/           # OAuth manager (X, LinkedIn, Meta, YouTube)
+        seo/                   # SEO template editor, CSV combination uploader, quality gate
+        launch/                # Kanban launch checklists (PH, G2, Capterra, Reddit, IH)
+        settings/              # Brand profile, compliance address, tone directives
+        login/, register/
+      sitemap.ts, robots.ts    # Dynamic sitemap (5k URL cap) and robots.txt
+    components/                # Sidebar, TopBar, SEO page renderer, preview mockups
     lib/
-      api-client.ts            # Typed fetch wrapper, token storage, auto-refresh
-      hooks.ts                 # TanStack Query hooks
+      api-client.ts            # Typed fetch wrapper, token refresh, API client SDK
+      hooks.ts                 # TanStack Query hooks for all resources
     public/
       gr-attribution.js        # Attribution snippet for main product
     middleware.ts              # Auth guard (Edge runtime)
@@ -52,43 +59,46 @@ GrowthEngine/
   backend/                     # FastAPI (Railway service 1)
     app/
       core/
-        config.py              # All env vars via pydantic-settings
+        config.py              # Env vars via pydantic-settings
         database.py            # Async SQLAlchemy engine + session
-        jwt.py                 # JWT create/verify/hash utilities
-        deps.py                # FastAPI auth dependencies
+        jwt.py                 # JWT access/refresh rotation & hashing
+        deps.py                # FastAPI auth & role dependencies
       models/                  # All 20+ SQLAlchemy models (full schema)
         base.py, auth.py, leads.py, social.py, seo.py, launch.py, analytics.py
       routers/                 # FastAPI routers
-        auth.py                # /api/v1/auth/*
-        brand.py               # /api/v1/brand
-        analytics.py           # /api/v1/r/{code}, /analytics/overview
-        webhooks.py            # /api/v1/webhooks/signup
+        auth.py, brand.py, analytics.py, webhooks.py
+        icps.py, leads.py, campaigns.py, email_events.py
+        connections.py, ideas.py, posts.py, videos.py
+        seo.py, tools.py, launch.py, reviews.py
       services/                # Shared infrastructure
-        ai.py                  # Anthropic wrapper, brand context injection
-        claims_guard.py        # Rejects prohibited claims in AI output
+        ai.py                  # Anthropic Claude wrapper, structured JSON
+        claims_guard.py        # Prohibited claims / guarantees validator
+        quality_gate.py        # Programmatic SEO quality gate (>600w, <70% sim)
+        email_verify.py        # Syntax, MX lookup, disposable, role checks
+        domain_health.py       # Live SPF, DKIM, DMARC DNS resolution
         ratelimit.py           # Redis sliding-window rate limiter
         crypto.py              # Fernet encrypt/decrypt for OAuth tokens
-        utm.py                 # UTM link builder
-        dryrun.py              # DRY_RUN guard for all outbound actions
+        utm.py                 # UTM link builder & short link redirect
+        dryrun.py              # DRY_RUN guard wrapping all outbound actions
+        storage.py             # Cloudflare R2 / S3 signed upload URLs
         audit.py               # Immutable audit log writer
-      providers/               # Swappable provider interfaces
+      providers/               # Swappable providers
         email.py               # EmailProvider (Resend + Stub)
-        social.py              # SocialPublisher (X, LinkedIn + Stubs)
+        social.py              # SocialPublisher (X, LinkedIn, IG, FB, YouTube + Stubs)
         video.py               # VideoGenerator (Stub)
       prompts/                 # AI prompt templates (.txt files)
     worker/                    # ARQ workers (Railway service 2)
-      main.py                  # WorkerSettings, cron registry
+      main.py                  # WorkerSettings, 8 scheduled cron jobs
       jobs/
         analytics.py           # sync_analytics_rollup (nightly)
-    tests/                     # pytest suite
-      conftest.py              # Async test client, in-memory SQLite
-      test_auth.py             # Auth + JWT refresh rotation tests
-      test_services.py         # UTM, claims guard, HMAC webhook tests
+        email.py               # send_due_emails, check_campaign_health, process_email_events
+        social.py              # publish_due_posts, generate_weekly_content_batch, refresh_social_tokens
+        seo.py                 # seo_publish_batch (weekly)
+    tests/                     # pytest suite (46 tests, all passing)
 
   docs/
     ARCHITECTURE.md            # ← this file
     PROGRESS.md                # Build checklist
-
   docker-compose.yml           # Local dev: PostgreSQL + Redis + API + Frontend
 ```
 

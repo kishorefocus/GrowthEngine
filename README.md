@@ -282,6 +282,100 @@ Tokens are securely stored encrypted at rest with Fernet using `ENCRYPTION_KEY`.
 | 1 — Foundation | Schema, auth, analytics, admin shell, dashboard | ✅ Done |
 | 2 — Leads & Email | Lead engine, verification, campaigns, scheduler, inbox | ✅ Done |
 | 3 — Social & Video | Content studio, publishers, calendar, video, connections | ✅ Done |
-| 4 — SEO & Launch | Programmatic SEO, free tools, launch hub, hardening | ⏳ Next |
+| 4 — SEO & Launch | Programmatic SEO, free tools, launch hub, hardening | ✅ Done |
 
 See [`docs/PROGRESS.md`](docs/PROGRESS.md) for detailed checklists.
+
+---
+
+## Observability & Sentry Setup
+
+Both the FastAPI backend and ARQ worker include Sentry SDK integration out of the box.
+
+### 1. Backend & Worker (Python)
+Add to your environment (`.env` or Railway environment variables):
+```bash
+SENTRY_DSN=https://your_key@sentry.io/your_project_id
+ENVIRONMENT=production
+```
+- **FastAPI**: Automatically captures unhandled exceptions, route performance, and HTTP errors.
+- **ARQ Worker**: Initialized on startup in `worker/main.py`; monitors background job health, cron task runs, and external API call exceptions.
+
+### 2. Frontend (Next.js)
+To add Sentry error tracking to the Next.js frontend:
+1. Run `npx @sentry/wizard@latest -i nextjs` in `frontend/`.
+2. Provide your Sentry DSN.
+3. Errors on both client render and server-side ISR generation will be tracked.
+
+---
+
+## Runbook: Safely Turning Off `DRY_RUN` (Going Live)
+
+The Growth Engine defaults to `DRY_RUN=true`. In this mode:
+- Emails are formatted, rendered, and logged to `email_send_logs` with `is_dry_run=True`, but **never** transmitted to real inboxes.
+- Social posts are generated, queued, and scheduled, but external API publishers log the payload without publishing to live feeds.
+- Video upload payloads are verified, but not pushed to live channels.
+- Review request emails are recorded in `review_requests` with dry-run audit logs.
+
+Follow this checklist before flipping `DRY_RUN=false` in production.
+
+### Phase 1 — Pre-Flight Infrastructure & Compliance Checklist
+- [ ] **Dedicated Cold Email Domain & DNS Setup**:
+  - Use a dedicated domain (e.g. `mail-getyourclientsb2b.com` or `getyourclients-reach.com`), **never** your primary root business domain.
+  - Verify DNS records:
+    - `SPF`: `v=spf1 include:mailgun.org ~all` (or your ESP equivalent)
+    - `DKIM`: TXT record from your ESP
+    - `DMARC`: `v=DMARC1; p=quarantine; pct=100; rua=mailto:dmarc-reports@...`
+    - `MX`: Valid MX records pointing to your email service provider.
+- [ ] **Warm-up Period**:
+  - Warm up new mailboxes for 2 to 3 weeks using a warmup service before launching high-volume campaigns.
+  - Start with a conservative limit: 10–20 emails/day per sender, ramping gradually up to 50/day.
+- [ ] **OAuth App Permissions & Approvals**:
+  - **X**: Developer App elevated to Read & Write.
+  - **LinkedIn**: Organization page admin access approved for company page sharing.
+  - **Meta**: Instagram Business connected to Facebook Page; App Review approved for `instagram_content_publish` and `pages_manage_posts`.
+  - **Google Cloud**: YouTube Data API v3 quota enabled; initial uploads set to `unlisted` or `private`.
+- [ ] **Claims Guard & Brand Voice Alignment**:
+  - Verify that `BrandProfile` in the database contains accurate product descriptions, positioning, and USP.
+  - Test generating a content batch to confirm that `claims_guard.py` filters out any unverified statistics or unsubstantiated competitor claims.
+- [ ] **Unsubscribe & Suppression End-to-End**:
+  - Test sending an email to a test account in dry-run mode, inspect the HMAC unsubscribe link, and click it to confirm it adds the address to `SuppressionList`.
+
+### Phase 2 — Flipping `DRY_RUN=false`
+1. **Railway Production Services**:
+   - Navigate to your Railway project dashboard.
+   - Select the **API Service** > **Variables** > Set `DRY_RUN=false`.
+   - Select the **Worker Service** > **Variables** > Set `DRY_RUN=false`.
+   - Redeploy or trigger a rolling restart of both services.
+2. **Local / Self-Hosted Docker**:
+   - In `backend/.env`, set:
+     ```bash
+     DRY_RUN=false
+     ```
+   - Restart the containers:
+     ```bash
+     docker compose down && docker compose up -d
+     ```
+
+### Phase 3 — Active Production Monitoring & Auto-Guardrails
+- **Automated Health Gates**:
+  - The ARQ worker runs `check_campaign_health` every 15 minutes.
+  - If any active campaign's bounce rate exceeds **5%**, the worker automatically **pauses** the campaign, logs an alert, and flags it in the Admin Dashboard.
+- **Worker Cron Schedules**:
+  - `send_due_emails` (every 1 min): Sends emails within scheduled sending windows (default: Mon–Fri 9am–5pm recipient timezone).
+  - `publish_due_posts` (every 1 min): Publishes approved posts scheduled in `scheduled_posts`.
+  - `refresh_social_tokens` (hourly): Proactively refreshes expiring OAuth access tokens for all platforms.
+  - `seo_publish_batch` (weekly): Publishes pre-approved SEO pages that passed quality gates.
+- **Admin Dashboard Monitoring**:
+  - Check `/admin/dashboard` daily for campaign bounce rates, reply rates, unsubscribes, and lead verification ratios.
+
+### Phase 4 — Emergency Rollback (Killswitch)
+If you detect abnormal bounce rates, spam complaints, or platform API warnings:
+1. Immediately set `DRY_RUN=true` in Railway or your `.env`.
+2. Restart the backend API and worker services:
+   ```bash
+   # Outbound sends and social dispatches will immediately revert to dry-run logging.
+   ```
+3. In `/admin/campaigns`, click **Pause** on all active campaigns.
+4. Review the audit log in `backend` via the `audit_logs` table to trace any failed dispatches.
+

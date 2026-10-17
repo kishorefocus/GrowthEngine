@@ -26,8 +26,12 @@ from app.routers import (
     email_events,
     icps,
     ideas,
+    launch,
     leads,
     posts,
+    reviews,
+    seo,
+    tools,
     videos,
     webhooks,
 )
@@ -138,6 +142,15 @@ app.include_router(connections.router, prefix=API_PREFIX)
 app.include_router(ideas.router, prefix=API_PREFIX)
 app.include_router(posts.router, prefix=API_PREFIX)
 app.include_router(videos.router, prefix=API_PREFIX)
+# Prompt 4 routers
+app.include_router(seo.router, prefix=f"{API_PREFIX}/seo")
+app.include_router(seo.public_router, prefix=API_PREFIX)
+app.include_router(seo.public_router)  # also public at /public/seo
+app.include_router(tools.router, prefix=API_PREFIX)
+app.include_router(tools.router)  # also public at /public/tools
+app.include_router(tools.admin_tools_router, prefix=API_PREFIX)
+app.include_router(launch.router, prefix=API_PREFIX)
+app.include_router(reviews.router, prefix=API_PREFIX)
 
 
 # ─── /api/v1/auth/me convenience endpoint ───────────────────────────────────

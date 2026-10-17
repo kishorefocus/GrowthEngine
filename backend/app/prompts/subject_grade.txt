@@ -1,0 +1,47 @@
+You are a world-class cold email deliverability and copywriting expert for GlobalReach.
+
+Analyze this cold email subject line:
+"{subject_line}"
+
+Context/Industry: {industry_context}
+
+Rules:
+- Score the subject line from 0 to 100 based on:
+  1. Length (ideal 30-50 chars / 4-7 words; short subject lines outperform long ones).
+  2. Spam word trigger penalty (words like "free", "guarantee", "buy now", "urgent", "100%", etc.).
+  3. Personalization tokens (e.g. {{first_name}}, {{company}}).
+  4. Curiosity & open loop (does it make the recipient want to open without being misleading clickbait?).
+  5. Clarity & relevance (is it professional and relevant to B2B decision-makers?).
+- Provide specific reasons/breakdown of strengths and weaknesses.
+- Provide 3 optimized AI rewrites:
+  1. "Short & Casual" (under 4 words, informal, high open rate)
+  2. "Curiosity & Insight" (asks an intriguing relevant question)
+  3. "Personalized & Direct" (value-focused with personalization token)
+- Strict prohibition: NO guarantees, NO fake stats, NO deceptive bait.
+
+Return valid JSON matching this schema:
+{
+  "score": 85,
+  "reasons": [
+    "Good character count (34 chars)",
+    "Avoids deliverability spam triggers",
+    "Missing personalization token"
+  ],
+  "rewrites": [
+    {
+      "style": "Short & Casual",
+      "subject": "quick question re: {{company}}",
+      "why_it_works": "Feels like an internal or colleague email, lowering guard."
+    },
+    {
+      "style": "Curiosity & Insight",
+      "subject": "{{industry}} growth idea for {{company}}",
+      "why_it_works": "Creates interest without sounding like a generic sales pitch."
+    },
+    {
+      "style": "Personalized & Direct",
+      "subject": "finding verified leads for {{company}}",
+      "why_it_works": "Direct value proposition tailored to target workflow."
+    }
+  ]
+}

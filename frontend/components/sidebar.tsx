@@ -39,12 +39,12 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/leads", icon: <Users className="w-4 h-4" />, label: "Leads" },
   { href: "/admin/campaigns", icon: <Mail className="w-4 h-4" />, label: "Campaigns" },
   { href: "/admin/inbox", icon: <Inbox className="w-4 h-4" />, label: "Inbox" },
-  { href: "/admin/calendar", icon: <CalendarDays className="w-4 h-4" />, label: "Content Calendar", comingIn: "Prompt 3" },
-  { href: "/admin/ideas", icon: <Lightbulb className="w-4 h-4" />, label: "Ideas & Generator", comingIn: "Prompt 3" },
-  { href: "/admin/video", icon: <Clapperboard className="w-4 h-4" />, label: "Video Studio", comingIn: "Prompt 3" },
-  { href: "/admin/seo", icon: <Search className="w-4 h-4" />, label: "SEO Manager", comingIn: "Prompt 4" },
-  { href: "/admin/launch", icon: <Rocket className="w-4 h-4" />, label: "Launch Hub", comingIn: "Prompt 4" },
-  { href: "/admin/connections", icon: <Link2 className="w-4 h-4" />, label: "Connections", comingIn: "Prompt 3" },
+  { href: "/admin/calendar", icon: <CalendarDays className="w-4 h-4" />, label: "Content Calendar" },
+  { href: "/admin/ideas", icon: <Lightbulb className="w-4 h-4" />, label: "Ideas & Generator" },
+  { href: "/admin/video", icon: <Clapperboard className="w-4 h-4" />, label: "Video Studio" },
+  { href: "/admin/seo", icon: <Search className="w-4 h-4" />, label: "SEO Manager" },
+  { href: "/admin/launch", icon: <Rocket className="w-4 h-4" />, label: "Launch Hub" },
+  { href: "/admin/connections", icon: <Link2 className="w-4 h-4" />, label: "Connections" },
   { href: "/admin/settings", icon: <Settings className="w-4 h-4" />, label: "Settings" },
 ];
 

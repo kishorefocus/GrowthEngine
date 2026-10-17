@@ -696,5 +696,197 @@ export function useDeleteVideo() {
   });
 }
 
+// ─── Prompt 4 Query Keys & Hooks ─────────────────────────────────────────────
+
+import {
+  seoApi,
+  toolsApi,
+  launchApi,
+  reviewsApi,
+  SEOTemplate,
+  SEOPageItem,
+  LaunchTaskItem,
+  ReviewRequestItem,
+} from "./api-client";
+
+export const prompt4Keys = {
+  seoTemplates: ["seo", "templates"] as const,
+  seoPages: (params?: any) => ["seo", "pages", params] as const,
+  toolsOverview: ["tools", "overview"] as const,
+  launchTasks: (platform?: string, status?: string) => ["launch", "tasks", platform, status] as const,
+  reviews: ["reviews"] as const,
+};
+
+// ─── SEO Hooks ───────────────────────────────────────────────────────────────
+
+export function useSEOTemplates() {
+  return useQuery({
+    queryKey: prompt4Keys.seoTemplates,
+    queryFn: seoApi.getTemplates,
+  });
+}
+
+export function useCreateSEOTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      type: string;
+      url_pattern: string;
+      title_pattern: string;
+      h1_pattern: string;
+      body_prompt: string;
+    }) => seoApi.createTemplate(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: prompt4Keys.seoTemplates }),
+  });
+}
+
+export function useDeleteSEOTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => seoApi.deleteTemplate(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: prompt4Keys.seoTemplates }),
+  });
+}
+
+export function useSEOPages(params?: { status?: string; template_id?: string; min_quality_score?: number }) {
+  return useQuery({
+    queryKey: prompt4Keys.seoPages(params),
+    queryFn: () => seoApi.listPages(params),
+  });
+}
+
+export function useGenerateSEOPages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      templateId,
+      variablesList,
+      csvContent,
+    }: {
+      templateId: string;
+      variablesList: Array<Record<string, any>>;
+      csvContent?: string;
+    }) => seoApi.generate(templateId, variablesList, csvContent),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["seo", "pages"] }),
+  });
+}
+
+export function useBatchPublishSEOPages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (pageIds: string[]) => seoApi.batchPublish(pageIds),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["seo", "pages"] });
+      qc.invalidateQueries({ queryKey: ["analytics", "overview"] });
+    },
+  });
+}
+
+// ─── Tools Hooks ─────────────────────────────────────────────────────────────
+
+export function useToolsOverview() {
+  return useQuery({
+    queryKey: prompt4Keys.toolsOverview,
+    queryFn: toolsApi.getOverview,
+    refetchInterval: 30 * 1000,
+  });
+}
+
+export function useGradeSubjectLine() {
+  return useMutation({
+    mutationFn: ({
+      subjectLine,
+      industryContext,
+      emailCaptured,
+      utmSource,
+    }: {
+      subjectLine: string;
+      industryContext?: string;
+      emailCaptured?: string;
+      utmSource?: string;
+    }) => toolsApi.gradeSubject(subjectLine, industryContext, emailCaptured, utmSource),
+  });
+}
+
+export function useVerifyEmailTool() {
+  return useMutation({
+    mutationFn: ({
+      email,
+      emailCaptured,
+      utmSource,
+    }: {
+      email: string;
+      emailCaptured?: string;
+      utmSource?: string;
+    }) => toolsApi.verifyEmail(email, emailCaptured, utmSource),
+  });
+}
+
+// ─── Launch Hub Hooks ────────────────────────────────────────────────────────
+
+export function useLaunchTasks(platform?: string, status?: string) {
+  return useQuery({
+    queryKey: prompt4Keys.launchTasks(platform, status),
+    queryFn: () => launchApi.listTasks(platform, status),
+  });
+}
+
+export function useCreateLaunchTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<LaunchTaskItem>) => launchApi.createTask(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["launch", "tasks"] }),
+  });
+}
+
+export function useUpdateLaunchTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<LaunchTaskItem> }) =>
+      launchApi.updateTask(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["launch", "tasks"] }),
+  });
+}
+
+export function useDeleteLaunchTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => launchApi.deleteTask(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["launch", "tasks"] }),
+  });
+}
+
+export function useGenerateLaunchAssets() {
+  return useMutation({
+    mutationFn: ({
+      platform,
+      taskType,
+      customNotes,
+    }: {
+      platform: string;
+      taskType: string;
+      customNotes?: string;
+    }) => launchApi.generateAssets(platform, taskType, customNotes),
+  });
+}
+
+// ─── Reviews Hooks ───────────────────────────────────────────────────────────
+
+export function useReviewRequests() {
+  return useQuery({
+    queryKey: prompt4Keys.reviews,
+    queryFn: reviewsApi.listRequests,
+  });
+}
+
+export function useSendReviewRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userEmail, platform }: { userEmail: string; platform: "g2" | "capterra" }) =>
+      reviewsApi.sendRequest(userEmail, platform),
+    onSuccess: () => qc.invalidateQueries({ queryKey: prompt4Keys.reviews }),
+  });
+}
+
 
 

@@ -655,4 +655,231 @@ export const videoApi = {
     apiFetch<void>(`/videos/${id}`, { method: "DELETE" }),
 };
 
+// ─── Prompt 4: SEO, Tools, Launch & Reviews Types ────────────────────────────
+
+export interface SEOTemplate {
+  id: string;
+  type: string;
+  url_pattern: string;
+  title_pattern: string;
+  h1_pattern: string;
+  body_prompt: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SEOPageItem {
+  id: string;
+  template_id?: string;
+  slug: string;
+  variables?: Record<string, any>;
+  title?: string;
+  meta_description?: string;
+  content_json?: {
+    h1: string;
+    title: string;
+    intro: string;
+    sections: Array<{ heading: string; content: string }>;
+    faq: Array<{ question: string; answer: string }>;
+    comparison_table?: {
+      competitor_name?: string;
+      features?: Array<{ feature: string; globalreach: string; competitor: string }>;
+    };
+    cta?: {
+      headline: string;
+      subheadline: string;
+      button_text: string;
+      url: string;
+    };
+  };
+  status: "draft" | "published" | "rejected";
+  published_at?: string;
+  quality_score?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SEOPublicPage {
+  slug: string;
+  title: string;
+  meta_description: string;
+  content_json: Record<string, any>;
+  schema_org: Record<string, any>;
+  published_at?: string;
+}
+
+export interface SubjectRewrite {
+  style: string;
+  subject: string;
+  why_it_works: string;
+}
+
+export interface SubjectGradeResult {
+  score: number;
+  reasons: string[];
+  rewrites: SubjectRewrite[];
+  input_stats: Record<string, any>;
+  cta: {
+    headline: string;
+    subheadline: string;
+    button_text: string;
+    url: string;
+  };
+}
+
+export interface EmailVerifyToolResult {
+  email: string;
+  syntax_ok: boolean;
+  mx_ok: boolean;
+  is_disposable: boolean;
+  is_role: boolean;
+  status: "valid" | "invalid" | "risky" | "locked";
+  notes: string[];
+  daily_checks_remaining: number;
+  requires_email_unlock: boolean;
+  cta: {
+    headline: string;
+    subheadline: string;
+    button_text: string;
+    url: string;
+  };
+}
+
+export interface LaunchTaskItem {
+  id: string;
+  platform: "product_hunt" | "g2" | "capterra" | "reddit" | "indiehackers" | "other";
+  title: string;
+  description?: string;
+  due_date?: string;
+  status: "pending" | "in_progress" | "done";
+  assets?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewRequestItem {
+  id: string;
+  user_email: string;
+  platform: "g2" | "capterra";
+  status: "pending" | "sent" | "reviewed";
+  sent_at?: string;
+  created_at: string;
+}
+
+// ─── Prompt 4 API Clients ───────────────────────────────────────────────────
+
+export const seoApi = {
+  getTemplates: () => apiFetch<SEOTemplate[]>("/seo/templates"),
+  createTemplate: (data: {
+    type: string;
+    url_pattern: string;
+    title_pattern: string;
+    h1_pattern: string;
+    body_prompt: string;
+  }) => apiFetch<SEOTemplate>("/seo/templates", { method: "POST", body: JSON.stringify(data) }),
+  deleteTemplate: (id: string) => apiFetch<void>(`/seo/templates/${id}`, { method: "DELETE" }),
+  generate: (templateId: string, variablesList: Array<Record<string, any>>, csvContent?: string) =>
+    apiFetch<SEOPageItem[]>("/seo/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        template_id: templateId,
+        variables_list: variablesList,
+        csv_content: csvContent,
+      }),
+    }),
+  listPages: (params?: { status?: string; template_id?: string; min_quality_score?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.template_id) sp.set("template_id", params.template_id);
+    if (params?.min_quality_score !== undefined) sp.set("min_quality_score", String(params.min_quality_score));
+    const qs = sp.toString() ? `?${sp.toString()}` : "";
+    return apiFetch<SEOPageItem[]>(`/seo/pages${qs}`);
+  },
+  batchPublish: (pageIds: string[]) =>
+    apiFetch<{ success: boolean; published_count: number; requested_count: number }>("/seo/pages/batch-publish", {
+      method: "POST",
+      body: JSON.stringify({ page_ids: pageIds }),
+    }),
+  getPublicSlugs: async (): Promise<string[]> => {
+    const res = await fetch(`${API_URL}/api/v1/public/seo/slugs`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    return res.json();
+  },
+  getPublicPage: async (slug: string): Promise<SEOPublicPage | null> => {
+    try {
+      const res = await fetch(`${API_URL}/api/v1/public/seo/${slug}`, { next: { revalidate: 86400 } });
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
+    }
+  },
+};
+
+export const toolsApi = {
+  gradeSubject: async (subjectLine: string, industryContext?: string, emailCaptured?: string, utmSource?: string) => {
+    const res = await fetch(`${API_URL}/api/v1/public/tools/subject-grader`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subject_line: subjectLine,
+        industry_context: industryContext,
+        email_captured: emailCaptured,
+        utm_source: utmSource || "free_tool",
+      }),
+    });
+    if (!res.ok) throw new Error("Failed to grade subject line");
+    return res.json() as Promise<SubjectGradeResult>;
+  },
+  verifyEmail: async (email: string, emailCaptured?: string, utmSource?: string) => {
+    const res = await fetch(`${API_URL}/api/v1/public/tools/email-verifier`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        email_captured: emailCaptured,
+        utm_source: utmSource || "free_tool",
+      }),
+    });
+    if (!res.ok) throw new Error("Failed to verify email address");
+    return res.json() as Promise<EmailVerifyToolResult>;
+  },
+  getOverview: () =>
+    apiFetch<{
+      total_runs: number;
+      emails_captured: number;
+      conversion_rate_pct: number;
+      by_tool: Record<string, number>;
+    }>("/tools/overview"),
+};
+
+export const launchApi = {
+  listTasks: (platform?: string, status?: string) => {
+    const sp = new URLSearchParams();
+    if (platform) sp.set("platform", platform);
+    if (status) sp.set("status_filter", status);
+    const qs = sp.toString() ? `?${sp.toString()}` : "";
+    return apiFetch<LaunchTaskItem[]>(`/launch/tasks${qs}`);
+  },
+  createTask: (data: Partial<LaunchTaskItem>) =>
+    apiFetch<LaunchTaskItem>("/launch/tasks", { method: "POST", body: JSON.stringify(data) }),
+  updateTask: (id: string, data: Partial<LaunchTaskItem>) =>
+    apiFetch<LaunchTaskItem>(`/launch/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteTask: (id: string) => apiFetch<void>(`/launch/tasks/${id}`, { method: "DELETE" }),
+  generateAssets: (platform: string, taskType: string, customNotes?: string) =>
+    apiFetch<{ platform: string; task_type: string; assets: Record<string, any> }>("/launch/generate-assets", {
+      method: "POST",
+      body: JSON.stringify({ platform, task_type: taskType, custom_notes: customNotes }),
+    }),
+};
+
+export const reviewsApi = {
+  sendRequest: (userEmail: string, platform: "g2" | "capterra") =>
+    apiFetch<ReviewRequestItem>("/reviews/request", {
+      method: "POST",
+      body: JSON.stringify({ user_email: userEmail, platform }),
+    }),
+  listRequests: () => apiFetch<ReviewRequestItem[]>("/reviews"),
+};
+
 

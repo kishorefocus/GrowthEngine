@@ -10,6 +10,7 @@ from arq.connections import RedisSettings
 from app.core.config import settings
 from worker.jobs.analytics import sync_analytics_rollup
 from worker.jobs.email import check_campaign_health, process_email_events, send_due_emails
+from worker.jobs.seo import seo_publish_batch
 from worker.jobs.social import (
     generate_weekly_content_batch,
     publish_due_posts,
@@ -21,6 +22,13 @@ async def startup(ctx):
     """Called once when the worker starts."""
     import logging
     logging.basicConfig(level=logging.INFO)
+    if settings.sentry_dsn:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.environment,
+            traces_sample_rate=0.2,
+        )
     logging.getLogger(__name__).info("ARQ worker started. dry_run=%s", settings.dry_run)
 
 
@@ -42,7 +50,8 @@ class WorkerSettings:
         publish_due_posts,
         generate_weekly_content_batch,
         refresh_social_tokens,
-        # Prompt 4 will add: generate_seo_pages
+        # Prompt 4 jobs
+        seo_publish_batch,
     ]
 
     cron_jobs = [
@@ -52,6 +61,7 @@ class WorkerSettings:
         cron(publish_due_posts, minute=None),                 # every 1 minute
         cron(generate_weekly_content_batch, weekday=6, hour=18, minute=0),  # Sunday 18:00
         cron(refresh_social_tokens, minute=0),                # hourly
+        cron(seo_publish_batch, weekday=0, hour=3, minute=0), # weekly Monday 03:00 UTC
     ]
 
     on_startup = startup

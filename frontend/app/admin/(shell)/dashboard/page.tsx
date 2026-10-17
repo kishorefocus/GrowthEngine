@@ -1,6 +1,13 @@
 "use client";
 
-import { useAnalyticsOverview, useCampaigns, usePosts } from "@/lib/hooks";
+import {
+  useAnalyticsOverview,
+  useCampaigns,
+  usePosts,
+  useSEOPages,
+  useToolsOverview,
+  useLaunchTasks,
+} from "@/lib/hooks";
 import {
   BarChart,
   Bar,
@@ -27,6 +34,10 @@ import {
   ExternalLink,
   CheckSquare,
   Share2,
+  Rocket,
+  Wrench,
+  Search,
+  Sparkles,
 } from "lucide-react";
 import { clsx } from "clsx";
 import Link from "next/link";
@@ -148,8 +159,15 @@ export default function DashboardPage() {
   const { data, isLoading, error, refetch } = useAnalyticsOverview();
   const { data: campaigns } = useCampaigns();
   const { data: pendingPosts } = usePosts({ status: "pending_approval" });
+  const { data: toolsOverview } = useToolsOverview();
+  const { data: launchTasks } = useLaunchTasks();
+  const { data: publishedSeoPages } = useSEOPages({ status: "published" });
 
   const pendingCount = pendingPosts?.length || 0;
+
+  const totalLaunch = launchTasks?.length || 0;
+  const completedLaunch = launchTasks?.filter((t) => t.status === "done").length || 0;
+  const launchProgressPct = totalLaunch > 0 ? Math.round((completedLaunch / totalLaunch) * 100) : 0;
 
   const channelData: ChannelData[] = Object.entries(data?.channels || {}).map(([channel, visits]) => ({
     channel,
@@ -281,15 +299,28 @@ export default function DashboardPage() {
             <ChannelChart data={channelData} loading={isLoading} />
           </div>
 
-          {/* Social Channels Breakdown Rows */}
-          <div className="mt-4 pt-3 border-t border-white/[0.04] flex flex-wrap items-center gap-4 text-xs">
-            <span className="text-slate-500 text-[11px] font-medium">Social attribution:</span>
-            {["x", "linkedin", "instagram", "facebook", "youtube"].map((sc) => {
-              const visits = data?.channels?.[sc] || 0;
+          {/* Channel Breakdown Rows (Social, SEO, Free Tools, Launch) */}
+          <div className="mt-4 pt-3 border-t border-white/[0.04] flex flex-wrap items-center gap-3.5 text-xs">
+            <span className="text-slate-500 text-[11px] font-medium">Attribution:</span>
+            {[
+              { id: "x", label: "X" },
+              { id: "linkedin", label: "LinkedIn" },
+              { id: "instagram", label: "Instagram" },
+              { id: "facebook", label: "Facebook" },
+              { id: "youtube", label: "YouTube" },
+              { id: "seo", label: "SEO" },
+              { id: "tools", label: "Tools" },
+              { id: "product_hunt", label: "PH" },
+              { id: "reddit", label: "Reddit" },
+            ].map((ch) => {
+              const visits = data?.channels?.[ch.id] || 0;
               return (
-                <div key={sc} className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHANNEL_COLORS[sc] }} />
-                  <span className="capitalize text-slate-400">{sc}:</span>
+                <div key={ch.id} className="flex items-center gap-1.5">
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: CHANNEL_COLORS[ch.id] || "#64748b" }}
+                  />
+                  <span className="text-slate-400">{ch.label}:</span>
                   <span className="font-mono text-white font-medium">{visits}</span>
                 </div>
               );
@@ -352,18 +383,129 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Free Tools + Launch Progress Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Free Lead-Magnet Tools Card */}
+        <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Wrench className="w-4 h-4 text-cyan-400" />
+                Free Lead-Magnet Tools
+              </h3>
+              <span className="text-xs text-cyan-400 font-mono">
+                {toolsOverview?.conversion_rate_pct ?? 0}% conversion
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-4 text-center">
+              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div className="text-[10px] text-slate-400">Total Tool Runs</div>
+                <div className="text-lg font-bold text-white mt-0.5">
+                  {toolsOverview?.total_runs ?? 0}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div className="text-[10px] text-emerald-400">Emails Captured</div>
+                <div className="text-lg font-bold text-emerald-400 mt-0.5">
+                  {toolsOverview?.emails_captured ?? 0}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div className="text-[10px] text-slate-400">Daily IP Limit</div>
+                <div className="text-lg font-bold text-slate-300 mt-0.5">5 / day</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-white/[0.04] flex items-center justify-between text-xs">
+            <Link
+              href="/tools/subject-line-grader"
+              target="_blank"
+              className="text-slate-400 hover:text-cyan-300 flex items-center gap-1 transition-colors"
+            >
+              Subject Grader <ExternalLink className="w-3 h-3" />
+            </Link>
+            <Link
+              href="/tools/email-verifier"
+              target="_blank"
+              className="text-slate-400 hover:text-teal-300 flex items-center gap-1 transition-colors"
+            >
+              Email Verifier <ExternalLink className="w-3 h-3" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Product Launch Hub Progress Card */}
+        <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Rocket className="w-4 h-4 text-amber-400" />
+                Launch Hub Progress
+              </h3>
+              <Link href="/admin/launch" className="text-xs text-amber-400 hover:underline">
+                Manage Hub
+              </Link>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-slate-400">Checklist Completion</span>
+                <span className="font-mono text-white font-semibold">{launchProgressPct}%</span>
+              </div>
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-amber-400 to-cyan-400 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${launchProgressPct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="p-2 rounded-lg bg-white/[0.02]">
+                <span className="text-[10px] text-slate-500 block">Tasks Done</span>
+                <span className="font-mono font-bold text-emerald-400">{completedLaunch} / {totalLaunch}</span>
+              </div>
+              <div className="p-2 rounded-lg bg-white/[0.02]">
+                <span className="text-[10px] text-slate-500 block">Platforms</span>
+                <span className="font-mono font-bold text-white">5 Active</span>
+              </div>
+              <div className="p-2 rounded-lg bg-white/[0.02]">
+                <span className="text-[10px] text-slate-500 block">Reviews Sent</span>
+                <span className="font-mono font-bold text-cyan-400">G2/Capterra</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-white/[0.04]">
+            <Link
+              href="/admin/launch"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-slate-300 transition-all"
+            >
+              Open Launch Kanban Board →
+            </Link>
+          </div>
+        </div>
+      </div>
+
       {/* Top Posts + Top SEO Pages */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Top posts */}
         <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-          <h3 className="text-sm font-semibold text-white mb-3">Top Published Posts</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-white">Top Published Posts</h3>
+            <Link href="/admin/calendar" className="text-xs text-slate-400 hover:text-white">
+              Calendar
+            </Link>
+          </div>
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}
             </div>
           ) : data?.top_posts.length === 0 ? (
             <div className="text-center py-8 text-slate-600 text-sm">
-              No published posts yet. Build campaigns in Prompt 3.
+              No published posts yet. Schedule and approve in the Content Studio.
             </div>
           ) : (
             <div className="space-y-2">
@@ -381,25 +523,42 @@ export default function DashboardPage() {
 
         {/* Top SEO pages */}
         <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-          <h3 className="text-sm font-semibold text-white mb-3">Top SEO Pages</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Search className="w-4 h-4 text-emerald-400" />
+              Top Programmatic SEO Pages
+            </h3>
+            <Link href="/admin/seo" className="text-xs text-emerald-400 hover:underline">
+              SEO Manager
+            </Link>
+          </div>
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}
             </div>
-          ) : data?.top_seo_pages.length === 0 ? (
+          ) : (data?.top_seo_pages.length === 0 && (!publishedSeoPages || publishedSeoPages.length === 0)) ? (
             <div className="text-center py-8 text-slate-600 text-sm">
-              No SEO pages yet. Build them in Prompt 4.
+              No published SEO pages yet. Generate and publish in the SEO Manager.
             </div>
           ) : (
             <div className="space-y-2">
-              {data?.top_seo_pages.map((page) => (
-                <div key={page.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                  <div className="min-w-0">
+              {(data?.top_seo_pages.length ? data.top_seo_pages : publishedSeoPages?.slice(0, 5) || []).map((page: any) => (
+                <div key={page.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors">
+                  <div className="min-w-0 pr-2">
                     <p className="text-xs font-medium text-slate-300 truncate">{page.title || page.slug}</p>
-                    <p className="text-[11px] text-slate-600 truncate">/{page.slug}</p>
+                    <a
+                      href={`/${page.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-cyan-400 hover:underline truncate block"
+                    >
+                      /{page.slug}
+                    </a>
                   </div>
                   {page.quality_score != null && (
-                    <span className="text-xs font-mono text-emerald-400 shrink-0 ml-2">{page.quality_score}</span>
+                    <span className="text-xs font-mono font-bold text-emerald-400 shrink-0 ml-2 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
+                      Score: {page.quality_score}
+                    </span>
                   )}
                 </div>
               ))}
