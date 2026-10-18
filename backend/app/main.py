@@ -76,14 +76,16 @@ app = FastAPI(
 )
 
 # CORS — locked to Vercel domain + local dev
-_cors_origins = list(settings.cors_origins)
-if settings.frontend_url not in _cors_origins:
-    _cors_origins.append(settings.frontend_url)
+_cors_origins = [orig.rstrip("/") for orig in settings.cors_origins]
+if settings.frontend_url:
+    clean_frontend = settings.frontend_url.rstrip("/")
+    if clean_frontend not in _cors_origins:
+        _cors_origins.append(clean_frontend)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=r"^https://([a-zA-Z0-9-]+\.)*vercel\.app$|^http://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

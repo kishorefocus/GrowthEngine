@@ -1,5 +1,6 @@
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -78,6 +79,43 @@ class Settings(BaseSettings):
         "http://localhost:3001",
         "http://127.0.0.1:3001",
     ]
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def assemble_db_connection(cls, v: Any) -> str:
+        if isinstance(v, str):
+            v = v.strip()
+            # If using Neon / Supabase / standard postgres URL, ensure asyncpg dialect is specified
+            if v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
+    @field_validator("frontend_url", mode="before")
+    @classmethod
+    def clean_frontend_url(cls, v: Any) -> str:
+        if isinstance(v, str):
+            return v.strip().rstrip("/")
+        return v
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return [str(x).strip().rstrip("/") for x in parsed if x]
+                except Exception:
+                    pass
+            return [x.strip().rstrip("/") for x in v.split(",") if x.strip()]
+        elif isinstance(v, (list, tuple, set)):
+            return [str(x).strip().rstrip("/") for x in v if x]
+        return []
 
 
 @lru_cache
