@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useLogout, useMe } from "@/lib/hooks";
 import { clearTokens } from "@/lib/api-client";
@@ -54,6 +55,13 @@ export function Sidebar() {
   const logout = useLogout();
   const { data: user } = useMe();
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isDark = mounted ? theme === "dark" : true;
 
   const handleLogout = () => {
     clearTokens();
@@ -129,11 +137,12 @@ export function Sidebar() {
         )}
         <div className="flex gap-1.5">
           <button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={() => setTheme(isDark ? "light" : "dark")}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] transition-all"
+            aria-label="Toggle theme"
           >
-            {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            {theme === "dark" ? "Light" : "Dark"}
+            {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            {isDark ? "Light" : "Dark"}
           </button>
           <button
             onClick={handleLogout}

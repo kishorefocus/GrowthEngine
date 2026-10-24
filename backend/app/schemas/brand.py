@@ -1,5 +1,6 @@
 """Pydantic schemas for brand profile."""
-from typing import Optional
+from typing import Optional, Union
+from uuid import UUID
 from pydantic import BaseModel, HttpUrl
 
 
@@ -14,7 +15,7 @@ class BrandProfileUpdate(BaseModel):
 
 
 class BrandProfileResponse(BaseModel):
-    id: str
+    id: Union[UUID, str]
     product_name: str
     one_liner: Optional[str]
     value_props: Optional[list]

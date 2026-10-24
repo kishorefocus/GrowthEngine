@@ -114,6 +114,20 @@ async def list_campaigns(
     return [_campaign_to_response(c) for c in result.scalars()]
 
 
+@router.get("/domain-health", response_model=DomainHealthResponse)
+async def domain_health(
+    domain: Optional[str] = Query(None),
+    dkim_selector: str = Query("default"),
+    _: User = Depends(get_current_user),
+):
+    """Check SPF, DKIM, DMARC records for the sending domain."""
+    target_domain = domain or settings.sending_domain
+    if not target_domain:
+        raise HTTPException(status_code=400, detail="No SENDING_DOMAIN configured. Pass ?domain= to check a domain.")
+    result = await check_domain_health(target_domain, dkim_selector=dkim_selector)
+    return DomainHealthResponse(**result)
+
+
 @router.get("/{campaign_id}", response_model=CampaignResponse)
 async def get_campaign(
     campaign_id: str,
@@ -536,19 +550,3 @@ async def preview_ai_email(
             claims_safe=False,
             violations=violations or [str(exc)],
         )
-
-
-# ─── Domain Health ────────────────────────────────────────────────────────────
-
-@router.get("/domain-health", response_model=DomainHealthResponse)
-async def domain_health(
-    domain: Optional[str] = Query(None),
-    dkim_selector: str = Query("default"),
-    _: User = Depends(get_current_user),
-):
-    """Check SPF, DKIM, DMARC records for the sending domain."""
-    target_domain = domain or settings.sending_domain
-    if not target_domain:
-        raise HTTPException(status_code=400, detail="No SENDING_DOMAIN configured. Pass ?domain= to check a domain.")
-    result = await check_domain_health(target_domain, dkim_selector=dkim_selector)
-    return DomainHealthResponse(**result)
