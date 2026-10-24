@@ -5,7 +5,9 @@ Social connections (OAuth) router:
 - Start OAuth, callback handling, list connected accounts with status and expiry, disconnect.
 """
 from datetime import datetime, timedelta, timezone
+import base64
 import hashlib
+import json
 import logging
 import secrets
 from typing import Optional
@@ -88,20 +90,33 @@ async def get_oauth_authorization_url(
     redirect_uri = f"{settings.api_url}/api/v1/connections/{platform}/callback"
 
     if platform == "x":
-        # PKCE S256
+        if not settings.x_client_id:
+            # Fallback to internal mock callback when live credentials are not set
+            mock_url = f"{redirect_uri}?code=mock_x_code&state={state}"
+            return OAuthAuthorizeResponse(platform=platform, authorization_url=mock_url, state=state)
+
+        # RFC 7636 PKCE S256
         code_verifier = secrets.token_urlsafe(64)
-        code_challenge = hashlib.sha256(code_verifier.encode()).digest()
-        code_challenge_b64 = secrets.token_urlsafe(32)  # simplified urlsafe representation
+        code_challenge_b64 = (
+            base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
+            .decode("ascii")
+            .rstrip("=")
+        )
+        state_payload = json.dumps({
+            "nonce": secrets.token_urlsafe(16),
+            "platform": "x",
+            "code_verifier": code_verifier,
+        })
+        state = encrypt_token(state_payload)
         _oauth_states[state] = {
             "platform": "x",
             "code_verifier": code_verifier,
             "created_at": datetime.now(timezone.utc),
         }
 
-        client_id = settings.x_client_id or "x_client_mock"
         params = {
             "response_type": "code",
-            "client_id": client_id,
+            "client_id": settings.x_client_id,
             "redirect_uri": redirect_uri,
             "scope": "tweet.read tweet.write users.read offline.access",
             "state": state,
@@ -111,44 +126,59 @@ async def get_oauth_authorization_url(
         auth_url = f"https://twitter.com/i/oauth2/authorize?{urllib.parse.urlencode(params)}"
 
     elif platform == "linkedin":
+        if not settings.linkedin_client_id:
+            mock_url = f"{redirect_uri}?code=mock_linkedin_code&state={state}"
+            return OAuthAuthorizeResponse(platform=platform, authorization_url=mock_url, state=state)
+
         _oauth_states[state] = {
             "platform": "linkedin",
             "created_at": datetime.now(timezone.utc),
         }
-        client_id = settings.linkedin_client_id or "linkedin_client_mock"
         params = {
             "response_type": "code",
-            "client_id": client_id,
+            "client_id": settings.linkedin_client_id,
             "redirect_uri": redirect_uri,
-            "scope": "openid profile email w_member_social r_organization_social w_organization_social",
+            "scope": "openid profile email w_member_social",
             "state": state,
         }
         auth_url = f"https://www.linkedin.com/oauth/v2/authorization?{urllib.parse.urlencode(params)}"
 
-    elif platform == "meta":
-        # Meta handles both Instagram and Facebook Page
+    elif platform in ("meta", "instagram", "facebook"):
+        if not settings.meta_app_id:
+            mock_url = f"{redirect_uri}?code=mock_{platform}_code&state={state}"
+            return OAuthAuthorizeResponse(platform=platform, authorization_url=mock_url, state=state)
+
         _oauth_states[state] = {
-            "platform": "meta",
+            "platform": platform,
             "created_at": datetime.now(timezone.utc),
         }
-        client_id = settings.meta_app_id or "meta_app_mock"
+        if platform == "instagram":
+            scopes = "pages_show_list,instagram_basic,instagram_content_publish"
+        elif platform == "facebook":
+            scopes = "pages_show_list,pages_manage_posts,pages_read_engagement"
+        else:
+            scopes = "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish"
+
         params = {
-            "client_id": client_id,
+            "client_id": settings.meta_app_id,
             "redirect_uri": redirect_uri,
-            "scope": "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish",
+            "scope": scopes,
             "state": state,
             "response_type": "code",
         }
         auth_url = f"https://www.facebook.com/v19.0/dialog/oauth?{urllib.parse.urlencode(params)}"
 
     elif platform == "youtube":
+        if not settings.google_client_id:
+            mock_url = f"{redirect_uri}?code=mock_youtube_code&state={state}"
+            return OAuthAuthorizeResponse(platform=platform, authorization_url=mock_url, state=state)
+
         _oauth_states[state] = {
             "platform": "youtube",
             "created_at": datetime.now(timezone.utc),
         }
-        client_id = settings.google_client_id or "google_client_mock"
         params = {
-            "client_id": client_id,
+            "client_id": settings.google_client_id,
             "redirect_uri": redirect_uri,
             "response_type": "code",
             "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
@@ -167,7 +197,9 @@ async def get_oauth_authorization_url(
 @router.get("/{platform}/callback")
 async def oauth_callback(
     platform: str,
-    code: str = Query(...),
+    code: Optional[str] = Query(None),
+    error: Optional[str] = Query(None),
+    error_description: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -178,11 +210,20 @@ async def oauth_callback(
     """
     redirect_uri = f"{settings.api_url}/api/v1/connections/{platform}/callback"
 
+    # Handle provider cancellation or scope error gracefully
+    if error or not code:
+        err_msg = error_description or error or "OAuth authorization was denied or failed"
+        logger.warning("OAuth error for %s: %s (%s)", platform, err_msg, error)
+        from fastapi.responses import RedirectResponse
+        frontend_err_dest = f"{settings.frontend_url}/admin/connections?error={urllib.parse.quote(err_msg)}"
+        return RedirectResponse(url=frontend_err_dest, status_code=302)
+
     access_token = ""
     refresh_token = ""
     expires_at = datetime.now(timezone.utc) + timedelta(days=60)
     handle = ""
     external_id = ""
+    token_error_detail = ""
 
     # Simulated/Mock flow if API credentials are not set (e.g. during development/testing)
     is_mock = False
@@ -190,7 +231,7 @@ async def oauth_callback(
         is_mock = True
     elif platform == "linkedin" and not settings.linkedin_client_secret:
         is_mock = True
-    elif platform == "meta" and not settings.meta_app_secret:
+    elif platform in ("meta", "instagram", "facebook") and not settings.meta_app_secret:
         is_mock = True
     elif platform == "youtube" and not settings.google_client_secret:
         is_mock = True
@@ -205,7 +246,17 @@ async def oauth_callback(
         # Live token exchange
         async with httpx.AsyncClient(timeout=30.0) as client:
             if platform == "x":
-                verifier = _oauth_states.get(state or "", {}).get("code_verifier", "")
+                # Recover code_verifier from encrypted state token or memory
+                verifier = ""
+                if state:
+                    try:
+                        decrypted = json.loads(decrypt_token(state))
+                        verifier = decrypted.get("code_verifier", "")
+                    except Exception:
+                        pass
+                if not verifier and state:
+                    verifier = _oauth_states.get(state, {}).get("code_verifier", "")
+
                 res = await client.post(
                     "https://api.twitter.com/2/oauth2/token",
                     data={
@@ -218,19 +269,23 @@ async def oauth_callback(
                     auth=(settings.x_client_id, settings.x_client_secret),
                 )
                 data = res.json()
-                access_token = data.get("access_token", "")
-                refresh_token = data.get("refresh_token", "")
-                expires_in = data.get("expires_in", 7200)
-                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-                # Fetch handle
-                me_res = await client.get(
-                    "https://api.twitter.com/2/users/me",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                )
-                if me_res.status_code == 200:
-                    user_data = me_res.json().get("data", {})
-                    handle = f"@{user_data.get('username')}"
-                    external_id = user_data.get("id")
+                if res.status_code != 200:
+                    token_error_detail = data.get("error_description") or data.get("error") or f"X API error: {res.status_code}"
+                    logger.error("X token exchange error (%d): %s", res.status_code, data)
+                else:
+                    access_token = data.get("access_token", "")
+                    refresh_token = data.get("refresh_token", "")
+                    expires_in = data.get("expires_in", 7200)
+                    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                    # Fetch handle
+                    me_res = await client.get(
+                        "https://api.twitter.com/2/users/me",
+                        headers={"Authorization": f"Bearer {access_token}"},
+                    )
+                    if me_res.status_code == 200:
+                        user_data = me_res.json().get("data", {})
+                        handle = f"@{user_data.get('username')}"
+                        external_id = user_data.get("id")
 
             elif platform == "linkedin":
                 res = await client.post(
@@ -250,8 +305,20 @@ async def oauth_callback(
                 expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 handle = "GlobalReach Company"
                 external_id = "org_globalreach"
+                if access_token:
+                    try:
+                        me_res = await client.get(
+                            "https://api.linkedin.com/v2/userinfo",
+                            headers={"Authorization": f"Bearer {access_token}"},
+                        )
+                        if me_res.status_code == 200:
+                            me_data = me_res.json()
+                            handle = me_data.get("name") or "LinkedIn Profile"
+                            external_id = me_data.get("sub", "org_globalreach")
+                    except Exception:
+                        pass
 
-            elif platform == "meta":
+            elif platform in ("meta", "instagram", "facebook"):
                 res = await client.get(
                     "https://graph.facebook.com/v19.0/oauth/access_token",
                     params={
@@ -264,8 +331,29 @@ async def oauth_callback(
                 data = res.json()
                 access_token = data.get("access_token", "")
                 expires_at = datetime.now(timezone.utc) + timedelta(days=60)
-                handle = "GlobalReach Meta"
-                external_id = "page_globalreach"
+                handle = f"GlobalReach {platform.capitalize()}"
+                external_id = f"page_{platform}"
+                if access_token:
+                    try:
+                        acc_res = await client.get(
+                            "https://graph.facebook.com/v19.0/me/accounts",
+                            params={"fields": "id,name,access_token,instagram_business_account{id,username}", "access_token": access_token},
+                        )
+                        if acc_res.status_code == 200:
+                            pages = acc_res.json().get("data", [])
+                            if pages:
+                                if platform == "instagram":
+                                    for p in pages:
+                                        ig = p.get("instagram_business_account")
+                                        if ig:
+                                            handle = f"@{ig.get('username')}"
+                                            external_id = ig.get("id")
+                                            break
+                                elif platform == "facebook":
+                                    handle = pages[0].get("name", "Facebook Page")
+                                    external_id = pages[0].get("id", "fb_page")
+                    except Exception:
+                        pass
 
             elif platform == "youtube":
                 res = await client.post(
@@ -285,9 +373,30 @@ async def oauth_callback(
                 expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 handle = "GlobalReach YouTube"
                 external_id = "channel_globalreach"
+                if access_token:
+                    try:
+                        ch_res = await client.get(
+                            "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
+                            headers={"Authorization": f"Bearer {access_token}"},
+                        )
+                        if ch_res.status_code == 200:
+                            items = ch_res.json().get("items", [])
+                            if items:
+                                snippet = items[0].get("snippet", {})
+                                handle = snippet.get("title", "YouTube Channel")
+                                external_id = items[0].get("id", "channel_globalreach")
+                    except Exception:
+                        pass
+
+    if state:
+        _oauth_states.pop(state, None)
 
     if not access_token:
-        raise HTTPException(status_code=400, detail="Failed to obtain access token from provider")
+        err_msg = token_error_detail or "Failed to obtain access token from provider"
+        logger.warning("OAuth token exchange failed for %s: %s", platform, err_msg)
+        from fastapi.responses import RedirectResponse
+        frontend_err_dest = f"{settings.frontend_url}/admin/connections?error={urllib.parse.quote(err_msg)}"
+        return RedirectResponse(url=frontend_err_dest, status_code=302)
 
     # Upsert social account
     existing = await db.execute(select(SocialAccount).where(SocialAccount.platform == platform))

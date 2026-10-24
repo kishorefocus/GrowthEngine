@@ -305,10 +305,22 @@ async def test_video_studio_pipeline(client: AsyncClient, auth_headers, test_db)
 @pytest.mark.asyncio
 async def test_connections_endpoints(client: AsyncClient, auth_headers, test_db):
     """Test OAuth authorize, mock connection, list, and disconnect."""
-    # 1. Authorize URL
-    auth_url_res = await client.get("/api/v1/connections/x/authorize", headers=auth_headers)
-    assert auth_url_res.status_code == 200
-    assert "authorization_url" in auth_url_res.json()
+    # 1. Authorize URL without credentials (returns local mock callback)
+    with unittest.mock.patch("app.routers.connections.settings.x_client_id", ""):
+        auth_url_res = await client.get("/api/v1/connections/x/authorize", headers=auth_headers)
+        assert auth_url_res.status_code == 200
+        data = auth_url_res.json()
+        assert "authorization_url" in data
+        assert "mock_x_code" in data["authorization_url"]
+
+    # 1b. Authorize URL with configured client_id (returns live Twitter PKCE OAuth URL)
+    with unittest.mock.patch("app.routers.connections.settings.x_client_id", "real_client_id_123"):
+        live_res = await client.get("/api/v1/connections/x/authorize", headers=auth_headers)
+        assert live_res.status_code == 200
+        live_url = live_res.json()["authorization_url"]
+        assert "twitter.com/i/oauth2/authorize" in live_url
+        assert "client_id=real_client_id_123" in live_url
+        assert "code_challenge_method=S256" in live_url
 
     # 2. Mock connect
     connect_res = await client.post(
@@ -328,3 +340,18 @@ async def test_connections_endpoints(client: AsyncClient, auth_headers, test_db)
     # 4. Disconnect
     del_res = await client.delete(f"/api/v1/connections/{account_id}", headers=auth_headers)
     assert del_res.status_code == 204
+
+    # 5. LinkedIn Authorize Scopes (uses standard openid profile email w_member_social)
+    with unittest.mock.patch("app.routers.connections.settings.linkedin_client_id", "li_client_123"):
+        li_res = await client.get("/api/v1/connections/linkedin/authorize", headers=auth_headers)
+        assert li_res.status_code == 200
+        li_url = li_res.json()["authorization_url"]
+        assert "scope=openid+profile+email+w_member_social" in li_url
+
+    # 6. Graceful OAuth error handling on callback (e.g. user denied or provider error)
+    err_cb_res = await client.get(
+        "/api/v1/connections/linkedin/callback?error=unauthorized_scope_error&error_description=Scope+NOT+authorized",
+        follow_redirects=False,
+    )
+    assert err_cb_res.status_code == 302
+    assert "error=Scope" in err_cb_res.headers["location"]

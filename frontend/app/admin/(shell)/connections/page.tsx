@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   useConnections,
   useConnectMock,
@@ -48,7 +48,7 @@ const PLATFORMS: PlatformConfig[] = [
     name: "LinkedIn",
     category: "Professional Network",
     description: "LinkedIn Posts API for publishing directly to your company / organization page.",
-    scopes: ["w_member_social", "r_organization_social", "w_organization_social"],
+    scopes: ["openid", "profile", "email", "w_member_social"],
     gradient: "from-blue-600/10 to-indigo-600/10 border-blue-500/20",
     iconBg: "bg-blue-600/15 text-blue-400 border-blue-500/30",
     officialDocUrl: "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api",
@@ -91,6 +91,22 @@ export default function ConnectionsPage() {
   const disconnectMutation = useDisconnectAccount();
 
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("error");
+    if (connected) {
+      toast.success(`Connected ${connected.toUpperCase()} account successfully!`);
+      refetch();
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (error) {
+      toast.error(`Connection failed: ${error}`);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [refetch]);
 
   const getAccountForPlatform = (platformId: string) => {
     return accounts?.find((a) => a.platform.toLowerCase() === platformId.toLowerCase());
