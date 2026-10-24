@@ -398,6 +398,8 @@ export const campaignsApi = {
     apiFetch<{ status: string }>(`/campaigns/${id}/pause`, { method: "POST" }),
   resume: (id: string) =>
     apiFetch<{ status: string }>(`/campaigns/${id}/resume`, { method: "POST" }),
+  launch: (id: string) =>
+    apiFetch<{ status: string }>(`/campaigns/${id}/launch`, { method: "POST" }),
   stats: (id: string) =>
     apiFetch<CampaignStats>(`/campaigns/${id}/stats`),
   enrollLeads: (campaign_id: string, lead_ids: string[]) =>
@@ -527,6 +529,7 @@ export interface CalendarItem {
   status: string;
   scheduled_at: string;
   published_at?: string;
+  error?: string;
 }
 
 export interface CalendarFeedResponse {
@@ -612,6 +615,8 @@ export const postsApi = {
     }),
   retry: (id: string) =>
     apiFetch<Post>(`/posts/${id}/retry`, { method: "POST" }),
+  publish: (id: string) =>
+    apiFetch<Post>(`/posts/${id}/publish`, { method: "POST" }),
   update: (id: string, data: Partial<Post>) =>
     apiFetch<Post>(`/posts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: string) =>

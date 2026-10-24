@@ -4,6 +4,7 @@ Routes are prefixed under /api/v1.
 Public routes: /r/{code}, /webhooks/signup, /healthz
 All other routes require JWT authentication.
 """
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -53,11 +54,32 @@ if settings.sentry_dsn:
     )
 
 
+async def _background_scheduler():
+    """Periodic scheduler loop for executing due social posts and due emails in environments without an external Redis worker."""
+    while True:
+        try:
+            await asyncio.sleep(30)
+            from worker.jobs.social import publish_due_posts
+            from worker.jobs.email import send_due_emails
+            await publish_due_posts()
+            await send_due_emails()
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error("[background_scheduler] Periodic job error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting GlobalReach Growth Engine API (env=%s, dry_run=%s)", settings.environment, settings.dry_run)
     await init_db()
+    sched_task = asyncio.create_task(_background_scheduler())
     yield
+    sched_task.cancel()
+    try:
+        await sched_task
+    except asyncio.CancelledError:
+        pass
     logger.info("API shutting down.")
 
 

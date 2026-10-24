@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models.auth import BrandProfile, SocialAccount
 from app.models.social import ContentIdea, Post
-from app.providers.social import PostPayload, get_social_publisher
+from app.providers.social import PostPayload, PublishResult, get_social_publisher
 from app.routers.analytics import register_short_link
 from app.services.audit import write_audit_log
 from app.services.crypto import decrypt_token, encrypt_token
@@ -29,9 +29,75 @@ from app.services.utm import utm_dict
 logger = logging.getLogger(__name__)
 
 
+async def publish_single_post(session: AsyncSession, post: Post) -> PublishResult:
+    """
+    Publish a single post immediately using its connected platform account.
+    Updates post.status, post.published_at, post.external_post_id, post.error, and audit log.
+    """
+    acc_res = await session.execute(
+        select(SocialAccount).where(SocialAccount.platform == post.platform)
+    )
+    account = acc_res.scalar_one_or_none()
+
+    access_token = ""
+    account_id = None
+    if account and account.encrypted_access_token:
+        try:
+            access_token = decrypt_token(account.encrypted_access_token)
+            account_id = account.external_id
+        except Exception as exc:
+            logger.error("Failed to decrypt access token for %s: %s", post.platform, exc)
+            if not settings.dry_run:
+                err_msg = "OAuth token decryption failed. Please reconnect your account in Connections."
+                post.status = "failed"
+                post.error = err_msg
+                await session.commit()
+                return PublishResult(external_post_id="", success=False, error=err_msg)
+
+    publisher = get_social_publisher(post.platform)
+    payload = PostPayload(
+        platform=post.platform,
+        body=post.body or "",
+        media_urls=post.media_urls,
+        link_url=post.link_url,
+        access_token=access_token,
+        account_id=account_id,
+    )
+
+    pub_result = await publisher.publish(payload)
+
+    if pub_result.success:
+        post.status = "published"
+        post.published_at = datetime.now(timezone.utc)
+        post.external_post_id = pub_result.external_post_id
+        post.error = None
+        logger.info("Published post %s to %s (external_id=%s)", post.id, post.platform, pub_result.external_post_id)
+    else:
+        post.status = "failed"
+        post.error = pub_result.error or "Publishing failed"
+        logger.warning("Failed to publish post %s to %s: %s", post.id, post.platform, post.error)
+
+    await write_audit_log(
+        session,
+        action="post.publish_attempt",
+        user_id=None,
+        entity="posts",
+        entity_id=str(post.id),
+        meta={
+            "platform": post.platform,
+            "success": pub_result.success,
+            "external_post_id": pub_result.external_post_id,
+            "error": pub_result.error,
+            "dry_run": settings.dry_run,
+        },
+    )
+    await session.commit()
+    return pub_result
+
+
 async def publish_due_posts(ctx: Optional[dict] = None, db: Optional[AsyncSession] = None) -> dict:
     """
-    ARQ Cron job: runs every 1 minute.
+    Cron job: runs periodically.
     Fetches posts where status='scheduled' and scheduled_at <= now().
     Publishes to platform, records errors or success, respects DRY_RUN.
     """
@@ -53,62 +119,11 @@ async def publish_due_posts(ctx: Optional[dict] = None, db: Optional[AsyncSessio
         due_posts = result.scalars().all()
 
         for post in due_posts:
-            # Fetch connected social account
-            acc_res = await session.execute(
-                select(SocialAccount).where(SocialAccount.platform == post.platform)
-            )
-            account = acc_res.scalar_one_or_none()
-
-            access_token = ""
-            account_id = None
-            if account and account.encrypted_access_token:
-                try:
-                    access_token = decrypt_token(account.encrypted_access_token)
-                    account_id = account.external_id
-                except Exception as exc:
-                    logger.error("Failed to decrypt access token for %s: %s", post.platform, exc)
-
-            publisher = get_social_publisher(post.platform)
-            payload = PostPayload(
-                platform=post.platform,
-                body=post.body or "",
-                media_urls=post.media_urls,
-                link_url=post.link_url,
-                access_token=access_token,
-                account_id=account_id,
-            )
-
-            pub_result = await publisher.publish(payload)
-
+            pub_result = await publish_single_post(session, post)
             if pub_result.success:
-                post.status = "published"
-                post.published_at = datetime.now(timezone.utc)
-                post.external_post_id = pub_result.external_post_id
-                post.error = None
                 published_count += 1
-                logger.info("Published post %s to %s (external_id=%s)", post.id, post.platform, pub_result.external_post_id)
             else:
-                post.status = "failed"
-                post.error = pub_result.error or "Publishing failed"
                 failed_count += 1
-                logger.warning("Failed to publish post %s to %s: %s", post.id, post.platform, post.error)
-
-            await write_audit_log(
-                session,
-                action="post.publish_attempt",
-                user_id=None,
-                entity="posts",
-                entity_id=str(post.id),
-                meta={
-                    "platform": post.platform,
-                    "success": pub_result.success,
-                    "external_post_id": pub_result.external_post_id,
-                    "error": pub_result.error,
-                    "dry_run": settings.dry_run,
-                },
-            )
-
-        await session.commit()
 
     if db is not None:
         await _process_with_session(db)

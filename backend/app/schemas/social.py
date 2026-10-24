@@ -145,6 +145,7 @@ class CalendarItem(BaseModel):
     status: str
     scheduled_at: datetime
     published_at: Optional[datetime] = None
+    error: Optional[str] = None
 
 
 class CalendarFeedResponse(BaseModel):

@@ -78,6 +78,15 @@ def _step_to_response(s: SequenceStep) -> SequenceStepResponse:
     )
 
 
+def _to_uuid(val: str | uuid.UUID, detail: str = "Campaign not found.") -> uuid.UUID:
+    if isinstance(val, uuid.UUID):
+        return val
+    try:
+        return uuid.UUID(str(val))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=404, detail=detail)
+
+
 # ─── Campaign CRUD ────────────────────────────────────────────────────────────
 
 @router.post("", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED)
@@ -134,7 +143,8 @@ async def get_campaign(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    result = await db.execute(select(Campaign).where(Campaign.id == cid))
     c = result.scalar_one_or_none()
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found.")
@@ -148,7 +158,8 @@ async def update_campaign(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    result = await db.execute(select(Campaign).where(Campaign.id == cid))
     c = result.scalar_one_or_none()
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found.")
@@ -169,7 +180,8 @@ async def delete_campaign(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    result = await db.execute(select(Campaign).where(Campaign.id == cid))
     c = result.scalar_one_or_none()
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found.")
@@ -186,7 +198,8 @@ async def pause_campaign(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    result = await db.execute(select(Campaign).where(Campaign.id == cid))
     c = result.scalar_one_or_none()
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found.")
@@ -199,19 +212,22 @@ async def pause_campaign(
 
 
 @router.post("/{campaign_id}/resume")
+@router.post("/{campaign_id}/launch")
 async def resume_campaign(
     campaign_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    result = await db.execute(select(Campaign).where(Campaign.id == cid))
     c = result.scalar_one_or_none()
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found.")
-    if c.status != "paused":
-        raise HTTPException(status_code=400, detail=f"Campaign is not paused (status: '{c.status}').")
+    if c.status not in ("paused", "draft"):
+        raise HTTPException(status_code=400, detail=f"Campaign is not paused or in draft (status: '{c.status}').")
+    action = "campaign.launched" if c.status == "draft" else "campaign.resumed"
     c.status = "active"
-    await write_audit_log(db, "campaign.resumed", user_id=current_user.id, entity="campaigns", entity_id=campaign_id)
+    await write_audit_log(db, action, user_id=current_user.id, entity="campaigns", entity_id=campaign_id)
     await db.commit()
     return {"status": "active"}
 
@@ -225,7 +241,8 @@ async def campaign_stats(
     _: User = Depends(get_current_user),
 ):
     """Aggregate per-campaign stats from email_messages."""
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    result = await db.execute(select(Campaign).where(Campaign.id == cid))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Campaign not found.")
 
@@ -233,7 +250,7 @@ async def campaign_stats(
         return 0  # placeholder — filled below
 
     msgs = (await db.execute(
-        select(EmailMessage).where(EmailMessage.campaign_id == campaign_id)
+        select(EmailMessage).where(EmailMessage.campaign_id == cid)
     )).scalars().all()
 
     totals = {"sent": 0, "delivered": 0, "opened": 0, "clicked": 0,
@@ -287,13 +304,14 @@ async def enroll_leads(
     for the first step of the campaign's sequence.
     Only leads with verification_status='valid' may be enrolled.
     """
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    result = await db.execute(select(Campaign).where(Campaign.id == cid))
     campaign = result.scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found.")
 
     # Get sequence + first step
-    seq_result = await db.execute(select(Sequence).where(Sequence.campaign_id == campaign_id))
+    seq_result = await db.execute(select(Sequence).where(Sequence.campaign_id == cid))
     seq = seq_result.scalar_one_or_none()
     if not seq:
         raise HTTPException(status_code=400, detail="Campaign has no sequence.")
@@ -312,7 +330,8 @@ async def enroll_leads(
     skipped = []
 
     for lead_id in body.lead_ids:
-        lead_result = await db.execute(select(Lead).where(Lead.id == lead_id))
+        lid = _to_uuid(lead_id, "Lead not found.")
+        lead_result = await db.execute(select(Lead).where(Lead.id == lid))
         lead = lead_result.scalar_one_or_none()
         if not lead:
             skipped.append({"id": lead_id, "reason": "not_found"})
@@ -325,7 +344,7 @@ async def enroll_leads(
         existing_msg = await db.execute(
             select(EmailMessage).where(
                 EmailMessage.lead_id == lead.id,
-                EmailMessage.campaign_id == campaign_id,
+                EmailMessage.campaign_id == cid,
                 EmailMessage.step_id == first_step.id,
             )
         )
@@ -337,7 +356,7 @@ async def enroll_leads(
         token = secrets.token_urlsafe(24)
         msg = EmailMessage(
             lead_id=lead.id,
-            campaign_id=uuid.UUID(campaign_id),
+            campaign_id=cid,
             step_id=first_step.id,
             status="scheduled",
             tracking_token=token,
@@ -363,7 +382,8 @@ async def get_sequence(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    seq_result = await db.execute(select(Sequence).where(Sequence.campaign_id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    seq_result = await db.execute(select(Sequence).where(Sequence.campaign_id == cid))
     seq = seq_result.scalar_one_or_none()
     if not seq:
         raise HTTPException(status_code=404, detail="Sequence not found.")
@@ -378,7 +398,8 @@ async def list_steps(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    seq_result = await db.execute(select(Sequence).where(Sequence.campaign_id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    seq_result = await db.execute(select(Sequence).where(Sequence.campaign_id == cid))
     seq = seq_result.scalar_one_or_none()
     if not seq:
         raise HTTPException(status_code=404, detail="Sequence not found.")
@@ -395,7 +416,8 @@ async def create_step(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    seq_result = await db.execute(select(Sequence).where(Sequence.campaign_id == campaign_id))
+    cid = _to_uuid(campaign_id)
+    seq_result = await db.execute(select(Sequence).where(Sequence.campaign_id == cid))
     seq = seq_result.scalar_one_or_none()
     if not seq:
         raise HTTPException(status_code=404, detail="Sequence not found.")
@@ -423,7 +445,8 @@ async def update_step(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(SequenceStep).where(SequenceStep.id == step_id))
+    sid = _to_uuid(step_id, "Step not found.")
+    result = await db.execute(select(SequenceStep).where(SequenceStep.id == sid))
     step = result.scalar_one_or_none()
     if not step:
         raise HTTPException(status_code=404, detail="Step not found.")
@@ -441,7 +464,8 @@ async def delete_step(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(SequenceStep).where(SequenceStep.id == step_id))
+    sid = _to_uuid(step_id, "Step not found.")
+    result = await db.execute(select(SequenceStep).where(SequenceStep.id == sid))
     step = result.scalar_one_or_none()
     if not step:
         raise HTTPException(status_code=404, detail="Step not found.")
@@ -458,12 +482,13 @@ async def step_stats(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(SequenceStep).where(SequenceStep.id == step_id))
+    sid = _to_uuid(step_id, "Step not found.")
+    result = await db.execute(select(SequenceStep).where(SequenceStep.id == sid))
     step = result.scalar_one_or_none()
     if not step:
         raise HTTPException(status_code=404, detail="Step not found.")
     msgs = (await db.execute(
-        select(EmailMessage).where(EmailMessage.step_id == step_id)
+        select(EmailMessage).where(EmailMessage.step_id == sid)
     )).scalars().all()
     from collections import Counter
     counts = Counter(m.status for m in msgs)

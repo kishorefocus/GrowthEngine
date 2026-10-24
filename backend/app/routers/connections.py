@@ -343,17 +343,33 @@ async def oauth_callback(
                             pages = acc_res.json().get("data", [])
                             if pages:
                                 if platform == "instagram":
+                                    found_ig = False
                                     for p in pages:
                                         ig = p.get("instagram_business_account")
                                         if ig:
                                             handle = f"@{ig.get('username')}"
                                             external_id = ig.get("id")
+                                            if p.get("access_token"):
+                                                access_token = p["access_token"]
+                                            found_ig = True
                                             break
+                                    if not found_ig:
+                                        token_error_detail = (
+                                            "No Instagram Business/Creator account found linked to your Facebook Pages. "
+                                            "Please connect your Instagram account to a Facebook Page in Meta Business Suite and reconnect."
+                                        )
                                 elif platform == "facebook":
                                     handle = pages[0].get("name", "Facebook Page")
-                                    external_id = pages[0].get("id", "fb_page")
-                    except Exception:
-                        pass
+                                    external_id = pages[0].get("id")
+                                    if pages[0].get("access_token"):
+                                        access_token = pages[0]["access_token"]
+                            else:
+                                token_error_detail = (
+                                    "No Facebook Pages found on your account. Meta only supports automated posting to Facebook Pages, not personal profiles. "
+                                    "Please create a Facebook Page at https://www.facebook.com/pages/create and reconnect."
+                                )
+                    except Exception as exc:
+                        logger.warning("Error fetching Facebook pages: %s", exc)
 
             elif platform == "youtube":
                 res = await client.post(
@@ -391,7 +407,7 @@ async def oauth_callback(
     if state:
         _oauth_states.pop(state, None)
 
-    if not access_token:
+    if not access_token or token_error_detail:
         err_msg = token_error_detail or "Failed to obtain access token from provider"
         logger.warning("OAuth token exchange failed for %s: %s", platform, err_msg)
         from fastapi.responses import RedirectResponse

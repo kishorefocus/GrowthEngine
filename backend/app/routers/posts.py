@@ -340,6 +340,16 @@ async def approve_post(
         meta={"platform": post.platform, "status": post.status, "scheduled_at": str(post.scheduled_at)},
     )
     await db.commit()
+
+    # If scheduled time has already arrived or passed, trigger immediate publish
+    now = datetime.now(timezone.utc)
+    if post.scheduled_at:
+        sched = post.scheduled_at if post.scheduled_at.tzinfo is not None else post.scheduled_at.replace(tzinfo=timezone.utc)
+        if sched <= now:
+            from worker.jobs.social import publish_single_post
+            await publish_single_post(db, post)
+            await db.refresh(post)
+
     return _to_post_response(post)
 
 
@@ -431,6 +441,30 @@ async def retry_failed_post(
         meta={"platform": post.platform},
     )
     await db.commit()
+    return _to_post_response(post)
+
+
+@router.post("/posts/{id}/publish", response_model=PostResponse)
+async def publish_post_now(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Publish a post immediately to its platform."""
+    post = await db.get(Post, uuid.UUID(id))
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    from worker.jobs.social import publish_single_post
+    result = await publish_single_post(db, post)
+    await db.refresh(post)
+
+    if not result.success:
+        raise HTTPException(
+            status_code=400,
+            detail=result.error or "Failed to publish post to platform.",
+        )
+
     return _to_post_response(post)
 
 
@@ -546,6 +580,7 @@ async def get_calendar(
             status=p.status,
             scheduled_at=p.scheduled_at,
             published_at=p.published_at,
+            error=p.error,
         )
         for p in posts
         if p.scheduled_at

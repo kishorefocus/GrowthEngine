@@ -15,6 +15,7 @@ import asyncio
 from dataclasses import dataclass, field
 import logging
 from typing import Optional
+import urllib.parse
 import httpx
 
 from app.core.config import settings
@@ -164,9 +165,13 @@ class LinkedInPublisher(SocialPublisher):
                 "X-Restli-Protocol-Version": "2.0.0",
             }
 
+            commentary_text = post.body or ""
+            if post.link_url and post.link_url not in commentary_text:
+                commentary_text = f"{commentary_text}\n\n{post.link_url}".strip()
+
             payload = {
                 "author": author_urn,
-                "commentary": post.body,
+                "commentary": commentary_text,
                 "visibility": "PUBLIC",
                 "distribution": {
                     "feedDistribution": "MAIN_FEED",
@@ -214,6 +219,16 @@ class InstagramPublisher(SocialPublisher):
         async def _do_publish():
             if not post.access_token or not post.account_id:
                 return PublishResult(external_post_id="", success=False, error="Instagram requires access_token and Instagram account_id (IG user ID)")
+
+            if not str(post.account_id).isdigit():
+                return PublishResult(
+                    external_post_id="",
+                    success=False,
+                    error=(
+                        f"Invalid Instagram Account ID '{post.account_id}'. Meta Graph API requires an Instagram Professional/Business account linked to a Facebook Page. "
+                        "Please link an Instagram Business account to a Facebook Page and reconnect in Connections."
+                    ),
+                )
 
             # Instagram publishing requires an image or video URL
             media_url = (post.media_urls[0] if post.media_urls else None) or post.link_url
@@ -279,12 +294,46 @@ class FacebookPublisher(SocialPublisher):
             if not post.access_token or not post.account_id:
                 return PublishResult(external_post_id="", success=False, error="Facebook requires access_token and Page ID")
 
+            if not str(post.account_id).isdigit():
+                return PublishResult(
+                    external_post_id="",
+                    success=False,
+                    error=(
+                        f"Invalid Facebook Page ID '{post.account_id}'. Meta Graph API only supports publishing to Facebook Pages with numeric IDs (not personal profiles). "
+                        "Please create a Facebook Page at https://www.facebook.com/pages/create and reconnect Facebook in Connections."
+                    ),
+                )
+
             url = f"https://graph.facebook.com/v19.0/{post.account_id}/feed"
+            message_text = post.body or ""
+
+            # Check if link can be provided in the 'link' parameter (Open Graph link card).
+            # Meta Graph API strictly rejects localhost / loopback IPs in 'link' with:
+            # code 1500, error_subcode 1611248 ("The url you supplied is invalid").
+            # For local URLs, we append the link to the message text instead.
+            is_public_link = False
+            if post.link_url:
+                try:
+                    parsed = urllib.parse.urlparse(post.link_url)
+                    hostname = (parsed.hostname or "").lower()
+                    if (
+                        hostname
+                        and hostname not in ("localhost", "127.0.0.1", "0.0.0.0")
+                        and not hostname.endswith(".local")
+                        and "." in hostname
+                    ):
+                        is_public_link = True
+                except Exception:
+                    is_public_link = False
+
+                if not is_public_link and post.link_url not in message_text:
+                    message_text = f"{message_text}\n\n{post.link_url}".strip()
+
             payload: dict = {
-                "message": post.body,
+                "message": message_text,
                 "access_token": post.access_token,
             }
-            if post.link_url:
+            if is_public_link:
                 payload["link"] = post.link_url
 
             async with httpx.AsyncClient(timeout=30.0) as client:

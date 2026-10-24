@@ -8,6 +8,7 @@ import {
   useRejectPost,
   useReschedulePost,
   useRetryPost,
+  usePublishPost,
   useUpdatePost,
 } from "@/lib/hooks";
 import {
@@ -64,9 +65,21 @@ export default function CalendarPage() {
   const rejectMutation = useRejectPost();
   const rescheduleMutation = useReschedulePost();
   const retryMutation = useRetryPost();
+  const publishMutation = usePublishPost();
 
   const pendingPosts = posts?.filter((p) => p.status === "pending_approval") || [];
   const scheduledPosts = posts?.filter((p) => p.status === "scheduled") || [];
+
+  const handlePublishNow = async (id: string) => {
+    try {
+      await publishMutation.mutateAsync(id);
+      toast.success("Post published to platform!");
+      refetchCalendar();
+      refetchPosts();
+    } catch (err: any) {
+      toast.error(`Publishing failed: ${err.message}`);
+    }
+  };
 
   const handleApprove = async (id: string) => {
     try {
@@ -284,6 +297,11 @@ export default function CalendarPage() {
                       <p className="text-xs text-slate-300 line-clamp-4 leading-relaxed font-sans">
                         {item.body}
                       </p>
+                      {item.error && (
+                        <p className="text-[11px] text-rose-400 mt-2 bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                          {item.error}
+                        </p>
+                      )}
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-white/[0.04] space-y-2.5">
@@ -299,6 +317,17 @@ export default function CalendarPage() {
                         </span>
 
                         <div className="flex items-center gap-1.5">
+                          {item.status !== "published" && (
+                            <button
+                              onClick={() => handlePublishNow(item.id)}
+                              disabled={publishMutation.isPending}
+                              className="px-2 py-1 rounded bg-violet-600/20 text-violet-300 hover:bg-violet-600/30 text-[10px] font-semibold flex items-center gap-1 transition-all"
+                              title="Publish now"
+                            >
+                              <Send className="w-2.5 h-2.5" />
+                              Publish Now
+                            </button>
+                          )}
                           {item.status === "failed" && (
                             <button
                               onClick={() => handleRetry(item.id)}
@@ -367,6 +396,15 @@ export default function CalendarPage() {
                       >
                         <XCircle className="w-3.5 h-3.5" />
                         Reject
+                      </button>
+                      <button
+                        onClick={() => handlePublishNow(post.id)}
+                        disabled={publishMutation.isPending}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-violet-600 hover:bg-violet-500 shadow-sm shadow-violet-600/30 transition-all flex items-center gap-1.5"
+                        title="Publish immediately"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        Publish Now
                       </button>
                       <button
                         onClick={() => handleApprove(post.id)}

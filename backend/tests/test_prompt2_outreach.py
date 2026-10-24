@@ -19,10 +19,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.jwt import create_access_token
 from app.models.auth import BrandProfile, User
 from app.models.leads import (
     Campaign,
@@ -371,3 +373,63 @@ async def test_inbound_reply_webhook_unsubscribe_flow(client: AsyncClient, test_
         select(SuppressionList).where(SuppressionList.email_or_domain == "prospect@company.com")
     )
     assert sup_res.scalar_one_or_none() is not None
+
+
+# ─── 12. Campaign Pause, Resume & Launch from Draft ───────────────────────────
+
+@pytest.mark.asyncio
+async def test_campaign_pause_resume_and_launch_from_draft(client: AsyncClient, test_db):
+    user = User(
+        email=f"owner_{uuid.uuid4().hex[:6]}@example.com",
+        role="owner",
+        is_active=True,
+    )
+    test_db.add(user)
+    await test_db.commit()
+    await test_db.refresh(user)
+    token = create_access_token(user_id=str(user.id), role=user.role)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Create a campaign in draft status
+    camp = Campaign(name="Test Draft Campaign", status="draft")
+    test_db.add(camp)
+    await test_db.commit()
+    await test_db.refresh(camp)
+
+    # 2. Resume / launch draft campaign -> status becomes active
+    res = await client.post(f"/api/v1/campaigns/{camp.id}/resume", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["status"] == "active"
+    await test_db.refresh(camp)
+    assert camp.status == "active"
+
+    # 3. Cannot resume an already active campaign
+    res_err = await client.post(f"/api/v1/campaigns/{camp.id}/resume", headers=headers)
+    assert res_err.status_code == 400
+
+    # 4. Pause active campaign -> status becomes paused
+    res_pause = await client.post(f"/api/v1/campaigns/{camp.id}/pause", headers=headers)
+    assert res_pause.status_code == 200
+    assert res_pause.json()["status"] == "paused"
+    await test_db.refresh(camp)
+    assert camp.status == "paused"
+
+    # 5. Resume paused campaign -> status becomes active
+    res_resume = await client.post(f"/api/v1/campaigns/{camp.id}/resume", headers=headers)
+    assert res_resume.status_code == 200
+    assert res_resume.json()["status"] == "active"
+    await test_db.refresh(camp)
+    assert camp.status == "active"
+
+    # 6. Test launch route alias on draft campaign
+    camp2 = Campaign(name="Test Draft Campaign 2", status="draft")
+    test_db.add(camp2)
+    await test_db.commit()
+    await test_db.refresh(camp2)
+
+    res_launch = await client.post(f"/api/v1/campaigns/{camp2.id}/launch", headers=headers)
+    assert res_launch.status_code == 200
+    assert res_launch.json()["status"] == "active"
+    await test_db.refresh(camp2)
+    assert camp2.status == "active"
+

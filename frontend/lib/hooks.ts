@@ -286,7 +286,10 @@ export function usePauseCampaign() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => campaignsApi.pause(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: prompt2Keys.campaigns }),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: prompt2Keys.campaigns });
+      qc.invalidateQueries({ queryKey: prompt2Keys.campaign(id) });
+    },
   });
 }
 
@@ -294,7 +297,10 @@ export function useResumeCampaign() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => campaignsApi.resume(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: prompt2Keys.campaigns }),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: prompt2Keys.campaigns });
+      qc.invalidateQueries({ queryKey: prompt2Keys.campaign(id) });
+    },
   });
 }
 
@@ -598,6 +604,17 @@ export function useRetryPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => postsApi.retry(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["posts"] });
+      qc.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+export function usePublishPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => postsApi.publish(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["posts"] });
       qc.invalidateQueries({ queryKey: ["calendar"] });
