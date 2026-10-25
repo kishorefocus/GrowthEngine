@@ -41,26 +41,26 @@ PILLARS = [
 ]
 
 DEFAULT_FALLBACK_IDEAS = [
-    {"topic": "How to build a verified 500-lead list for commercial roofing agencies in 15 minutes", "pillar": "how-to"},
+    {"topic": "How to build a verified 500-lead list for commercial roofing agencies in 15 minutes with GetyourclientsB2B", "pillar": "how-to"},
     {"topic": "We filtered 100,000 cold emails: here are the 4 phrases that trigger spam filters instantly", "pillar": "tips_and_stats"},
-    {"topic": "Apollo.io vs GlobalReach: Why real-time MX validation beats cached scraper databases", "pillar": "competitor_alternatives"},
+    {"topic": "Apollo.io vs GetyourclientsB2B: Why real-time MX validation beats cached scraper databases", "pillar": "competitor_alternatives"},
     {"topic": "Building our email deliverability ramp in public: from 20 to 500 daily emails with 0% domain burn", "pillar": "build-in-public"},
     {"topic": "50 high-growth B2B fintech startups in London hiring VP Sales right now", "pillar": "industry_lead_lists"},
     {"topic": "The 3-line follow-up email that achieved a 22% reply rate without being pushy", "pillar": "how-to"},
-    {"topic": "Why buying aged domains is killing your outbound and what we did instead", "pillar": "build-in-public"},
-    {"topic": "ZoomInfo alternative for boutique recruitment agencies on a budget", "pillar": "competitor_alternatives"},
+    {"topic": "Why buying aged domains is killing your outbound and what we did instead at GetyourclientsB2B", "pillar": "build-in-public"},
+    {"topic": "ZoomInfo alternative for boutique recruitment agencies on a budget: GetyourclientsB2B", "pillar": "competitor_alternatives"},
     {"topic": "Cold email benchmarks in 2026: open rates, click-throughs, and realistic conversion expectations", "pillar": "tips_and_stats"},
-    {"topic": "Top 40 real estate development firms in Austin with verified founder contacts", "pillar": "industry_lead_lists"},
+    {"topic": "Top 40 real estate development firms in Austin with verified founder contacts on GetyourclientsB2B", "pillar": "industry_lead_lists"},
     {"topic": "Step-by-step tutorial: Setting up SPF, DKIM, and DMARC for a dedicated outreach subdomain", "pillar": "how-to"},
-    {"topic": "How we automated prospect reply classification into 6 categories with AI", "pillar": "build-in-public"},
-    {"topic": "Lusha vs GlobalReach: Cost comparison and email accuracy breakdown", "pillar": "competitor_alternatives"},
+    {"topic": "How we automated prospect reply classification into 6 categories with AI inside GetyourclientsB2B", "pillar": "build-in-public"},
+    {"topic": "Lusha vs GetyourclientsB2B: Cost comparison and email accuracy breakdown", "pillar": "competitor_alternatives"},
     {"topic": "The subtle difference between a personalized hook and creepy surveillance in sales emails", "pillar": "tips_and_stats"},
     {"topic": "30 fast-growing cybersecurity companies looking for channel partners this quarter", "pillar": "industry_lead_lists"},
-    {"topic": "How to convert an interested cold reply into a booked calendar discovery call", "pillar": "how-to"},
+    {"topic": "How to convert an interested cold reply into a booked calendar discovery call with GetyourclientsB2B", "pillar": "how-to"},
     {"topic": "Our worst outreach campaign ever: 3 fatal mistakes we will never repeat", "pillar": "build-in-public"},
-    {"topic": "Hunter.io alternative with built-in multi-step campaign sequences", "pillar": "competitor_alternatives"},
+    {"topic": "Hunter.io alternative with built-in multi-step campaign sequences: GetyourclientsB2B", "pillar": "competitor_alternatives"},
     {"topic": "Deliverability metrics you must track weekly: bounce rates, complaints, and spam trap signals", "pillar": "tips_and_stats"},
-    {"topic": "Top 50 Shopify Plus agencies in North America with key decision makers", "pillar": "industry_lead_lists"},
+    {"topic": "Top 50 Shopify Plus agencies in North America with key decision makers via GetyourclientsB2B", "pillar": "industry_lead_lists"},
 ]
 
 
@@ -153,10 +153,10 @@ async def generate_ideas(
     brand_res = await db.execute(select(BrandProfile).limit(1))
     brand = brand_res.scalar_one_or_none()
     brand_context = {
-        "product_name": brand.product_name if brand else "GlobalReach",
-        "one_liner": brand.one_liner if brand else "B2B client acquisition engine with verified leads and automated outreach",
+        "product_name": brand.product_name if brand else "GetyourclientsB2B",
+        "one_liner": brand.one_liner if brand else "B2B client discovery & cold outreach CRM across 190+ countries",
         "tone": brand.tone if brand else "Direct, authoritative, tactical, transparent",
-        "value_props": brand.value_props if brand else ["Verified B2B emails", "AI personalized sequences", "Domain deliverability safety"],
+        "value_props": brand.value_props if brand else ["Interactive global map discovery", "Verified B2B emails & contacts", "Cold outreach CRM & automated sequences"],
     }
 
     generated_items: list[dict] = []

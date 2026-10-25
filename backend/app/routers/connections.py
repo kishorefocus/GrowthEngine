@@ -237,7 +237,7 @@ async def oauth_callback(
         is_mock = True
 
     if is_mock or code.startswith("mock_"):
-        handle = f"@globalreach_{platform}"
+        handle = f"@getyourclientsb2b_{platform}"
         external_id = f"ext_{platform}_{uuid.uuid4().hex[:8]}"
         access_token = f"mock_access_token_{platform}_{uuid.uuid4().hex}"
         refresh_token = f"mock_refresh_token_{platform}_{uuid.uuid4().hex}"
@@ -303,8 +303,8 @@ async def oauth_callback(
                 refresh_token = data.get("refresh_token", "")
                 expires_in = data.get("expires_in", 5184000)  # 60 days
                 expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-                handle = "GlobalReach Company"
-                external_id = "org_globalreach"
+                handle = "GetyourclientsB2B"
+                external_id = "org_getyourclientsb2b"
                 if access_token:
                     try:
                         me_res = await client.get(
@@ -443,6 +443,94 @@ async def oauth_callback(
     frontend_dest = f"{settings.frontend_url}/admin/connections?connected={platform}"
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url=frontend_dest, status_code=302)
+
+
+@router.post("/instagram/sync-from-facebook", response_model=SocialAccountResponse)
+async def sync_instagram_from_facebook(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_owner),
+):
+    """
+    Sync Instagram Business account from the connected Facebook Page.
+    """
+    fb_res = await db.execute(select(SocialAccount).where(SocialAccount.platform == "facebook"))
+    fb_acc = fb_res.scalar_one_or_none()
+    if not fb_acc or not fb_acc.encrypted_access_token or not fb_acc.external_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Facebook must be connected first to sync its linked Instagram account."
+        )
+
+    try:
+        page_token = decrypt_token(fb_acc.encrypted_access_token)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not decrypt Facebook Page token.")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        page_id = fb_acc.external_id
+        res = await client.get(
+            f"https://graph.facebook.com/v19.0/{page_id}",
+            params={"fields": "instagram_business_account{id,username}", "access_token": page_token},
+        )
+        if res.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Failed to query Meta for linked Instagram account: {res.text}")
+
+        data = res.json()
+        ig_data = data.get("instagram_business_account")
+        if not ig_data:
+            raise HTTPException(
+                status_code=400,
+                detail="No Instagram Business account is linked to your Facebook Page. Please link it in Facebook Page Settings > Linked Accounts."
+            )
+
+        ig_id = str(ig_data["id"])
+        ig_username = ig_data.get("username", "instagram")
+        ig_handle = f"@{ig_username}"
+
+        ig_res = await db.execute(select(SocialAccount).where(SocialAccount.platform == "instagram"))
+        ig_acc = ig_res.scalar_one_or_none()
+        if not ig_acc:
+            ig_acc = SocialAccount(
+                platform="instagram",
+                handle=ig_handle,
+                external_id=ig_id,
+                encrypted_access_token=fb_acc.encrypted_access_token,
+                encrypted_refresh_token=fb_acc.encrypted_refresh_token,
+                expires_at=fb_acc.expires_at,
+                status="active",
+            )
+            db.add(ig_acc)
+        else:
+            ig_acc.handle = ig_handle
+            ig_acc.external_id = ig_id
+            ig_acc.encrypted_access_token = fb_acc.encrypted_access_token
+            ig_acc.encrypted_refresh_token = fb_acc.encrypted_refresh_token
+            ig_acc.expires_at = fb_acc.expires_at
+            ig_acc.status = "active"
+
+        await db.commit()
+        await db.refresh(ig_acc)
+
+        await write_audit_log(
+            db,
+            action="connection.connected",
+            user_id=current_user.id,
+            entity="social_accounts",
+            entity_id=str(ig_acc.id),
+            meta={"platform": "instagram", "handle": ig_handle, "synced_from": "facebook"},
+        )
+        await db.commit()
+
+        return SocialAccountResponse(
+            id=str(ig_acc.id),
+            platform=ig_acc.platform,
+            handle=ig_acc.handle,
+            external_id=ig_acc.external_id,
+            status=ig_acc.status,
+            expires_at=ig_acc.expires_at,
+            created_at=ig_acc.created_at,
+            updated_at=ig_acc.updated_at,
+        )
 
 
 @router.post("/connect-mock", response_model=SocialAccountResponse)

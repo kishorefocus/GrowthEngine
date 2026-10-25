@@ -35,7 +35,7 @@ export default function RegisterPage() {
     try {
       const data = await register.mutateAsync({ email, password });
       document.cookie = `gr_auth=${data.access_token}; path=/; max-age=${15 * 60}; samesite=strict`;
-      toast.success("Owner account created! Welcome to GlobalReach Growth Engine.");
+      toast.success("Owner account created! Welcome to GetyourclientsB2B Growth Engine.");
       router.push("/admin/dashboard");
     } catch (err: any) {
       if (err.status === 403) {

@@ -14,8 +14,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GlobalReach Growth Engine",
-  description: "Internal admin for GlobalReach — cold email, social content, SEO, and launch tracking.",
+  title: "GetyourclientsB2B Growth Engine",
+  description: "Internal admin for GetyourclientsB2B — cold email, social content, SEO, and launch tracking.",
 };
 
 export default function RootLayout({

@@ -74,6 +74,112 @@ class _SocialAdaptSchema(BaseModel):
     facebook: _FacebookAdapted
 
 
+TARGET_ROUTES = [
+    "https://getyourclientsb2b.com/",
+    "https://getyourclientsb2b.com/#product",
+    "https://getyourclientsb2b.com/#how-it-works",
+    "https://getyourclientsb2b.com/#industries",
+    "https://getyourclientsb2b.com/pricing",
+    "https://getyourclientsb2b.com/contact",
+]
+
+ROUTE_SCREENSHOT_MAP = {
+    "https://getyourclientsb2b.com/": "/screenshots/home.png",
+    "https://getyourclientsb2b.com/#product": "/screenshots/product.png",
+    "https://getyourclientsb2b.com/#how-it-works": "/screenshots/how-it-works.png",
+    "https://getyourclientsb2b.com/#industries": "/screenshots/industries.png",
+    "https://getyourclientsb2b.com/pricing": "/screenshots/pricing.png",
+    "https://getyourclientsb2b.com/contact": "/screenshots/contact.png",
+}
+
+ALL_FOLDER_SCREENSHOTS = [
+    "/screenshots/home.png",
+    "/screenshots/overview.png",
+    "/screenshots/discovery.png",
+    "/screenshots/discovery2.png",
+    "/screenshots/pipeline.png",
+    "/screenshots/pipeline2.png",
+    "/screenshots/inbox.png",
+    "/screenshots/calls.png",
+    "/screenshots/analytics.png",
+    "/screenshots/product.png",
+    "/screenshots/how-it-works.png",
+    "/screenshots/industries.png",
+    "/screenshots/pricing.png",
+    "/screenshots/contact.png",
+]
+
+
+def get_screenshot_for_route(route: str) -> str:
+    """Return local screenshot path for a given route on https://getyourclientsb2b.com."""
+    if not route:
+        return "/screenshots/home.png"
+    clean_route = route.rstrip("/")
+    for target, screenshot in ROUTE_SCREENSHOT_MAP.items():
+        if target.rstrip("/") == clean_route or (target != "https://getyourclientsb2b.com/" and target in route):
+            return screenshot
+    return "/screenshots/home.png"
+
+
+def get_all_folder_screenshots() -> list[str]:
+    """
+    Dynamically discover all image files inside backend/app/static/screenshots/
+    or frontend/public/screenshots/ and return them as web paths.
+    """
+    import os
+    discovered: list[str] = []
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "..", "static", "screenshots"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "public", "screenshots"),
+    ]
+    for c_dir in candidates:
+        if os.path.exists(c_dir):
+            try:
+                for fname in sorted(os.listdir(c_dir)):
+                    if fname.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                        path = f"/screenshots/{fname}"
+                        if path not in discovered:
+                            discovered.append(path)
+            except Exception:
+                pass
+    return discovered if discovered else ALL_FOLDER_SCREENSHOTS
+
+
+def get_all_screenshots_for_content(primary_route: Optional[str] = None) -> list[str]:
+    """
+    Return all 14 screenshot images from the screenshots folder.
+    Places the primary route's matching screenshot first, followed by all other screenshots,
+    ensuring every post content includes all images inside this folder.
+    """
+    all_imgs = get_all_folder_screenshots()
+    primary = get_screenshot_for_route(primary_route) if primary_route else "/screenshots/home.png"
+    remaining = [s for s in all_imgs if s != primary]
+    return [primary] + remaining
+
+
+def get_varied_destination_url(topic_or_pillar: str = "", platform: str = "", seed: Optional[str] = None) -> str:
+    """
+    Select an appropriate destination route on https://getyourclientsb2b.com
+    rotating across varied real routes (/, /#product, /#how-it-works, /#industries, /pricing, /contact).
+    Guarantees every platform in a batch and every new post gets a different route.
+    """
+    platform_offset = {
+        "x": 0,          # https://getyourclientsb2b.com/
+        "linkedin": 1,   # https://getyourclientsb2b.com/#product
+        "facebook": 2,   # https://getyourclientsb2b.com/#how-it-works
+        "instagram": 3,  # https://getyourclientsb2b.com/#industries
+        "youtube": 4,    # https://getyourclientsb2b.com/pricing
+    }
+    base_idx = platform_offset.get(platform.lower(), 0)
+    if seed:
+        try:
+            seed_hash = sum(ord(c) for c in str(seed))
+            base_idx = (base_idx + seed_hash) % len(TARGET_ROUTES)
+        except Exception:
+            pass
+    return TARGET_ROUTES[base_idx]
+
+
 def _wrap_utm_link(platform: str, pillar: str, post_id: str, base_url: str) -> tuple[str, dict]:
     """
     Wrap destination URL with UTM tags and register short link /r/{code}.
@@ -88,6 +194,11 @@ def _wrap_utm_link(platform: str, pillar: str, post_id: str, base_url: str) -> t
         content=post_id,
     )
     register_short_link(short_code, base_url, utm_data)
+
+    # In social media posts, use the live public getyourclientsb2b.com route directly
+    # instead of http://localhost:8000/r/{short_code}.
+    if not settings.api_url or "localhost" in settings.api_url or "127.0.0.1" in settings.api_url:
+        return base_url, utm_data
 
     short_link = f"{settings.api_url}/r/{short_code}"
     return short_link, utm_data
@@ -183,13 +294,13 @@ async def generate_platform_posts(
     brand_res = await db.execute(select(BrandProfile).limit(1))
     brand = brand_res.scalar_one_or_none()
     brand_context = {
-        "product_name": brand.product_name if brand else "GlobalReach",
-        "one_liner": brand.one_liner if brand else "B2B client acquisition engine with verified leads and automated outreach",
+        "product_name": brand.product_name if brand else "GetyourclientsB2B",
+        "one_liner": brand.one_liner if brand else "B2B client discovery & cold outreach CRM across 190+ countries",
         "tone": brand.tone if brand else "Direct, authoritative, tactical, transparent",
-        "value_props": json.dumps(brand.value_props) if (brand and brand.value_props) else '["Verified B2B emails", "AI personalized sequences", "Domain deliverability safety"]',
+        "value_props": json.dumps(brand.value_props) if (brand and brand.value_props) else '["Interactive global map discovery", "Verified B2B emails & contacts", "Cold outreach CRM & automated sequences"]',
         "topic": idea.topic,
         "pillar": idea.pillar or "how-to",
-        "link_url": payload.link_url or (brand.website_url if brand else "https://www.getyourclientsb2b.com"),
+        "link_url": payload.link_url or (brand.website_url if brand else "https://getyourclientsb2b.com"),
     }
 
     platforms = payload.platforms or ["x", "linkedin", "instagram", "facebook"]
@@ -209,12 +320,17 @@ async def generate_platform_posts(
         except Exception as exc:
             logger.warning("AI adaptation failed (%s), using deterministic template adapter", exc)
 
+    clean_topic = idea.topic
+    x_dest = get_varied_destination_url(clean_topic, "x", str(idea.id))
+    li_dest = get_varied_destination_url(clean_topic, "linkedin", str(idea.id))
+    ig_dest = get_varied_destination_url(clean_topic, "instagram", str(idea.id))
+    fb_dest = get_varied_destination_url(clean_topic, "facebook", str(idea.id))
+
     if not adapted_data:
-        # Deterministic compliant fallback matching all platform constraints
-        clean_topic = idea.topic
+        # Deterministic compliant fallback matching all platform constraints with varied routes
         adapted_data = _SocialAdaptSchema(
             x=_XAdapted(
-                body=f"Most B2B outbound fails because the leads are outdated.\n\nHere is how to tackle {clean_topic[:60]} with real-time verified contacts:\n\n1. Target precise ICP\n2. Run syntax + MX checks\n3. Deliver value first\n\nMore in thread below --- \nFull guide: {destination_url}",
+                body=f"Most B2B outbound fails because the leads are outdated.\n\nHere is how to tackle {clean_topic[:60]} with real-time verified contacts:\n\n1. Target precise ICP\n2. Run syntax + MX checks\n3. Deliver value first\n\nMore in thread below --- \nFull guide: {x_dest}",
                 is_thread=True,
             ),
             linkedin=_LinkedInAdapted(
@@ -224,12 +340,12 @@ async def generate_platform_posts(
                     "1. Real-time verification over stale databases\n"
                     "2. AI personalization that speaks to specific ICP pain points\n"
                     "3. Automated health ramps with strict stop rules\n\n"
-                    f"You can explore the full blueprint here: {destination_url}\n\n"
+                    f"You can explore the full blueprint on GetyourclientsB2B: {li_dest}\n\n"
                     "What has been your biggest deliverability challenge this quarter?"
                 )
             ),
             instagram=_InstagramAdapted(
-                caption=f"Mastering {clean_topic} for B2B client acquisition 📈 Swipe through for the step-by-step framework.\n\n#b2bsales #leadgeneration #prospecting #coldemail #agencylife #growthhacking",
+                caption=f"Mastering {clean_topic} for B2B client acquisition 📈 Swipe through for the step-by-step framework.\n\n🔗 Explore live platform: {ig_dest}\n\n#b2bsales #leadgeneration #prospecting #getyourclientsb2b #agencylife #growthhacking",
                 carousel_slides=[
                     f"Slide 1: Solving {clean_topic}",
                     "Slide 2: Step 1 - Filter Target ICP",
@@ -237,10 +353,10 @@ async def generate_platform_posts(
                     "Slide 4: Step 3 - AI Personalization",
                     "Slide 5: Key Takeaway & Next Steps",
                 ],
-                image_prompt="Modern dark mode UI dashboard showing clean data visualization and verified lead counters",
+                image_prompt=get_screenshot_for_route(ig_dest),
             ),
             facebook=_FacebookAdapted(
-                body=f"Struggling with {clean_topic}? Here is our complete step-by-step breakdown on scaling verified client acquisition: {destination_url}"
+                body=f"Struggling with {clean_topic}? Here is our complete step-by-step breakdown on scaling verified client acquisition with GetyourclientsB2B: {fb_dest}"
             ),
         )
 
@@ -249,13 +365,13 @@ async def generate_platform_posts(
     created_posts: list[Post] = []
 
     platform_configs = [
-        ("x", adapted_data.x.body, None, base_time),
-        ("linkedin", adapted_data.linkedin.body, None, base_time + timedelta(hours=2)),
-        ("instagram", adapted_data.instagram.caption, [adapted_data.instagram.image_prompt] if adapted_data.instagram.image_prompt else None, base_time + timedelta(hours=4)),
-        ("facebook", adapted_data.facebook.body, None, base_time + timedelta(hours=6)),
+        ("x", adapted_data.x.body, None, base_time, x_dest),
+        ("linkedin", adapted_data.linkedin.body, None, base_time + timedelta(hours=2), li_dest),
+        ("instagram", adapted_data.instagram.caption, get_all_screenshots_for_content(ig_dest), base_time + timedelta(hours=4), ig_dest),
+        ("facebook", adapted_data.facebook.body, get_all_screenshots_for_content(fb_dest), base_time + timedelta(hours=6), fb_dest),
     ]
 
-    for plat, body_text, media_urls, sched_time in platform_configs:
+    for plat, body_text, media_urls, sched_time, plat_dest_url in platform_configs:
         if plat not in platforms:
             continue
 
@@ -273,19 +389,25 @@ async def generate_platform_posts(
         check_claims(body_text)
 
         post_id = uuid.uuid4()
-        short_link, utm = _wrap_utm_link(
+        live_link, utm = _wrap_utm_link(
             platform=plat,
             pillar=idea.pillar or "social",
             post_id=str(post_id),
-            base_url=destination_url,
+            base_url=plat_dest_url,
         )
 
-        # Inject short link into body if needed
+        # Inject real link into body if needed
         body_with_link = body_text
-        if destination_url in body_with_link:
-            body_with_link = body_with_link.replace(destination_url, short_link)
-        elif plat in ("facebook", "x") and short_link not in body_with_link:
-            body_with_link += f" {short_link}"
+        if plat_dest_url in body_with_link:
+            if live_link != plat_dest_url:
+                body_with_link = body_with_link.replace(plat_dest_url, live_link)
+        elif destination_url in body_with_link and destination_url != live_link:
+            body_with_link = body_with_link.replace(destination_url, live_link)
+        elif live_link not in body_with_link and plat_dest_url not in body_with_link:
+            if plat in ("facebook", "x"):
+                body_with_link += f" {live_link}"
+            elif plat == "instagram":
+                body_with_link += f"\n\n🔗 {live_link}"
 
         post = Post(
             id=post_id,
@@ -293,7 +415,7 @@ async def generate_platform_posts(
             platform=plat,
             body=body_with_link,
             media_urls=media_urls,
-            link_url=short_link,
+            link_url=live_link,
             utm=utm,
             status="pending_approval",  # Queued for human approval
             scheduled_at=sched_time,

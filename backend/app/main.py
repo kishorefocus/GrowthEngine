@@ -176,6 +176,13 @@ app.include_router(tools.admin_tools_router, prefix=API_PREFIX)
 app.include_router(launch.router, prefix=API_PREFIX)
 app.include_router(reviews.router, prefix=API_PREFIX)
 
+import os
+from fastapi.staticfiles import StaticFiles
+
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(_static_dir):
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
 
 # ─── /api/v1/auth/me convenience endpoint ───────────────────────────────────
 

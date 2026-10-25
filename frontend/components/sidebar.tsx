@@ -78,7 +78,7 @@ export function Sidebar() {
             <TrendingUp className="w-4 h-4 text-violet-400" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-none">GlobalReach</p>
+            <p className="text-white font-bold text-sm leading-none">GetyourclientsB2B</p>
             <p className="text-violet-400/60 text-[10px] font-mono mt-0.5">Growth Engine</p>
           </div>
         </div>

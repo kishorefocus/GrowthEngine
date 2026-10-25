@@ -22,6 +22,7 @@ from app.models.auth import BrandProfile, SocialAccount
 from app.models.social import ContentIdea, Post
 from app.providers.social import PostPayload, PublishResult, get_social_publisher
 from app.routers.analytics import register_short_link
+from app.routers.posts import get_all_screenshots_for_content, get_varied_destination_url
 from app.services.audit import write_audit_log
 from app.services.crypto import decrypt_token, encrypt_token
 from app.services.utm import utm_dict
@@ -170,19 +171,21 @@ async def generate_weekly_content_batch(ctx: Optional[dict] = None, db: Optional
 
         for idx, idea in enumerate(ideas):
             sched_time = base_time + timedelta(days=idx)
-            for plat in ["x", "linkedin", "facebook"]:
+            for plat in ["x", "linkedin", "facebook", "instagram"]:
                 short_code = uuid.uuid4().hex[:8]
-                dest_url = "https://www.getyourclientsb2b.com"
+                dest_url = get_varied_destination_url(idea.topic, plat, f"{idea.id}_{idx}")
                 utm = utm_dict(source=plat, medium="social", campaign=idea.pillar or "batch", content=str(idea.id))
                 register_short_link(short_code, dest_url, utm)
-                short_link = f"{settings.api_url}/r/{short_code}"
+                link_to_use = dest_url if (not settings.api_url or "localhost" in settings.api_url or "127.0.0.1" in settings.api_url) else f"{settings.api_url}/r/{short_code}"
 
-                body = f"{idea.topic}\n\nFull guide and verified workflows: {short_link}"
+                body = f"{idea.topic}\n\nFull guide and verified workflows: {link_to_use}"
+                media_urls = get_all_screenshots_for_content(dest_url) if plat in ("instagram", "facebook") else None
                 post = Post(
                     idea_id=idea.id,
                     platform=plat,
                     body=body,
-                    link_url=short_link,
+                    media_urls=media_urls,
+                    link_url=link_to_use,
                     utm=utm,
                     status="pending_approval",
                     scheduled_at=sched_time,

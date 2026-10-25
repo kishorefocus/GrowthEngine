@@ -285,7 +285,7 @@ export default function SettingsPage() {
                   value={form.product_name}
                   onChange={(e) => setForm({ ...form, product_name: e.target.value })}
                   className={INPUT_CLS}
-                  placeholder="GlobalReach"
+                  placeholder="GetyourclientsB2B"
                 />
               </Field>
               <Field label="Website URL">
@@ -295,7 +295,7 @@ export default function SettingsPage() {
                   value={form.website_url}
                   onChange={(e) => setForm({ ...form, website_url: e.target.value })}
                   className={INPUT_CLS}
-                  placeholder="https://www.getyourclientsb2b.com"
+                  placeholder="https://getyourclientsb2b.com"
                 />
               </Field>
             </div>

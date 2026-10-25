@@ -42,6 +42,125 @@ const PLATFORMS = [
   { id: "youtube", name: "YouTube", color: "#f87171", bg: "bg-red-500/15 text-red-400 border-red-500/20" },
 ];
 
+function PostMediaGallery({ mediaUrls, platform }: { mediaUrls?: string[]; platform: string }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  if (!mediaUrls || mediaUrls.length === 0) return null;
+
+  const validImages = mediaUrls.filter(
+    (url) => url.endsWith(".png") || url.endsWith(".jpg") || url.startsWith("http") || url.startsWith("/")
+  );
+
+  if (validImages.length === 0) {
+    return (
+      <div className="p-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[11px] text-slate-400">
+        <span className="font-semibold text-slate-200">Image Prompt:</span> {mediaUrls[0]}
+      </div>
+    );
+  }
+
+  const currentImg = validImages[currentIndex] || validImages[0];
+  const imageName = currentImg.split("/").pop()?.replace(".png", "").replace(".jpg", "") || "";
+
+  return (
+    <div className="space-y-2">
+      {/* Main image viewer with carousel navigation */}
+      <div className="rounded-xl overflow-hidden border border-white/[0.08] bg-black/70 shadow-xl group relative">
+        <img
+          src={currentImg}
+          alt={`Slide ${currentIndex + 1} - ${imageName}`}
+          className="w-full h-56 object-cover object-top hover:scale-[1.01] transition-transform duration-200"
+        />
+
+        {/* Top badges */}
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+          <span className="px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-md text-[10px] font-mono text-white/90 border border-white/10 shadow-sm">
+            {currentIndex + 1} / {validImages.length}
+          </span>
+          <span
+            className={clsx(
+              "px-2 py-0.5 rounded-full text-[10px] font-medium backdrop-blur-md border shadow-sm",
+              platform === "instagram"
+                ? "bg-pink-500/20 text-pink-300 border-pink-500/30"
+                : "bg-blue-500/20 text-blue-300 border-blue-500/30"
+            )}
+          >
+            {platform === "instagram" ? "Instagram Carousel" : "Facebook Gallery"} ({validImages.length} images)
+          </span>
+        </div>
+
+        {/* Prev / Next controls */}
+        {validImages.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentIndex((prev) => (prev > 0 ? prev - 1 : validImages.length - 1));
+              }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center transition-all opacity-80 hover:opacity-100 border border-white/10 text-sm font-bold shadow-md cursor-pointer"
+              title="Previous image"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentIndex((prev) => (prev < validImages.length - 1 ? prev + 1 : 0));
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center transition-all opacity-80 hover:opacity-100 border border-white/10 text-sm font-bold shadow-md cursor-pointer"
+              title="Next image"
+            >
+              ›
+            </button>
+          </>
+        )}
+
+        {/* Bottom bar with filename */}
+        <div className="px-3 py-1.5 bg-black/90 flex items-center justify-between text-[10px] text-slate-400 border-t border-white/[0.06]">
+          <span className="font-mono text-slate-200 capitalize font-medium">{imageName.replace(/-/g, " ")}.png</span>
+          <span className="text-slate-400 text-[10px]">
+            {validImages.length > 1 ? `${validImages.length} screenshots attached` : "1 screenshot"}
+          </span>
+        </div>
+      </div>
+
+      {/* Thumbnails row (showing all images inside the folder) */}
+      {validImages.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+          {validImages.map((img, idx) => {
+            const thumbName = img.split("/").pop()?.replace(".png", "") || "";
+            return (
+              <button
+                key={img + idx}
+                type="button"
+                onClick={() => setCurrentIndex(idx)}
+                className={clsx(
+                  "relative shrink-0 rounded-lg overflow-hidden border transition-all cursor-pointer",
+                  idx === currentIndex
+                    ? "border-violet-500 ring-2 ring-violet-500/50 scale-105"
+                    : "border-white/10 opacity-60 hover:opacity-100"
+                )}
+                title={thumbName}
+              >
+                <img
+                  src={img}
+                  alt={thumbName}
+                  className="w-12 h-9 object-cover object-top"
+                />
+                <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[8px] font-mono text-center text-white truncate px-0.5">
+                  {idx + 1}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CalendarPage() {
   const [activeTab, setActiveTab] = useState<"calendar" | "approval">("calendar");
   const [selectedPlatform, setSelectedPlatform] = useState<string>("all");
@@ -423,12 +542,12 @@ export default function CalendarPage() {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white">
-                            GR
+                            GC
                           </div>
                           <div>
                             <div className="flex items-center gap-1">
-                              <span className="text-xs font-bold text-white">GlobalReach</span>
-                              <span className="text-[11px] text-slate-500">@getyourclients · Just now</span>
+                              <span className="text-xs font-bold text-white">GetyourclientsB2B</span>
+                              <span className="text-[11px] text-slate-500">@getyourclientsb2b · Just now</span>
                             </div>
                           </div>
                         </div>
@@ -445,11 +564,11 @@ export default function CalendarPage() {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded bg-blue-600 flex items-center justify-center text-xs font-bold text-white">
-                            GR
+                            GC
                           </div>
                           <div>
-                            <span className="text-xs font-bold text-white">GlobalReach Company</span>
-                            <p className="text-[10px] text-slate-500">B2B Growth & Lead Intelligence</p>
+                            <span className="text-xs font-bold text-white">GetyourclientsB2B</span>
+                            <p className="text-[10px] text-slate-500">B2B Client Discovery & Cold Outreach CRM</p>
                           </div>
                         </div>
                         <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">
@@ -462,20 +581,16 @@ export default function CalendarPage() {
                     )}
 
                     {post.platform === "instagram" && (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-pink-500 p-0.5">
                             <div className="w-full h-full bg-black rounded-full flex items-center justify-center text-[10px] font-bold text-white">
-                              GR
+                              GC
                             </div>
                           </div>
-                          <span className="text-xs font-bold text-white">globalreach.ai</span>
+                          <span className="text-xs font-bold text-white">getyourclientsb2b</span>
                         </div>
-                        {post.media_urls && post.media_urls.length > 0 && (
-                          <div className="p-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[11px] text-slate-400">
-                            <span className="font-semibold text-slate-200">Image Prompt:</span> {post.media_urls[0]}
-                          </div>
-                        )}
+                        <PostMediaGallery mediaUrls={post.media_urls} platform="instagram" />
                         <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">
                           {post.body}
                         </p>
@@ -483,13 +598,14 @@ export default function CalendarPage() {
                     )}
 
                     {post.platform === "facebook" && (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
                             f
                           </div>
-                          <span className="text-xs font-bold text-white">GlobalReach Lead Generation</span>
+                          <span className="text-xs font-bold text-white">GetyourclientsB2B</span>
                         </div>
+                        <PostMediaGallery mediaUrls={post.media_urls} platform="facebook" />
                         <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">
                           {post.body}
                         </p>

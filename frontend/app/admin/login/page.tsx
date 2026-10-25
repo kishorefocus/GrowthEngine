@@ -66,7 +66,7 @@ function LoginForm() {
             <div className="w-9 h-9 rounded-xl bg-violet-500/20 border border-violet-500/40 flex items-center justify-center">
               <TrendingUp className="w-5 h-5 text-violet-400" />
             </div>
-            <span className="text-white font-bold text-lg tracking-tight">GlobalReach</span>
+            <span className="text-white font-bold text-lg tracking-tight">GetyourclientsB2B</span>
           </div>
           <span className="text-xs font-mono text-violet-400/60 ml-12">Growth Engine</span>
         </div>
@@ -119,7 +119,7 @@ function LoginForm() {
             <div className="w-8 h-8 rounded-xl bg-violet-500/20 border border-violet-500/40 flex items-center justify-center">
               <TrendingUp className="w-4 h-4 text-violet-400" />
             </div>
-            <span className="text-white font-bold">GlobalReach Growth Engine</span>
+            <span className="text-white font-bold">GetyourclientsB2B Growth Engine</span>
           </div>
 
           <div className="mb-8">

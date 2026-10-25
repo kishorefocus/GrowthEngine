@@ -114,6 +114,31 @@ export default function ConnectionsPage() {
 
   const handleStartOAuth = async (platformId: string) => {
     setConnectingPlatform(platformId);
+
+    // If connecting Instagram and Facebook is already connected, try direct sync
+    if (platformId === "instagram") {
+      const fbConnected = accounts?.some((a) => a.platform.toLowerCase() === "facebook" && a.status === "active");
+      if (fbConnected) {
+        try {
+          const syncRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/connections/instagram/sync-from-facebook`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("gr_access_token") || ""}`,
+            },
+          });
+          if (syncRes.ok) {
+            const data = await syncRes.json();
+            toast.success(`Connected Instagram (${data.handle}) from Facebook Page!`);
+            refetch();
+            setConnectingPlatform(null);
+            return;
+          }
+        } catch {
+          // Fall back to regular OAuth flow below
+        }
+      }
+    }
+
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/connections/${platformId}/authorize`, {
         headers: {
@@ -136,7 +161,7 @@ export default function ConnectionsPage() {
     try {
       await connectMockMutation.mutateAsync({
         platform: platformId,
-        handle: `@globalreach_${platformId}`,
+        handle: `@getyourclientsb2b_${platformId}`,
       });
       toast.success(`Connected ${platformId.toUpperCase()} account successfully!`);
     } catch (err: any) {
