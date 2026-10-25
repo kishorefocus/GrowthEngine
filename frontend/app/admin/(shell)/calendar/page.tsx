@@ -191,8 +191,12 @@ export default function CalendarPage() {
 
   const handlePublishNow = async (id: string) => {
     try {
-      await publishMutation.mutateAsync(id);
-      toast.success("Post published to platform!");
+      const res = await publishMutation.mutateAsync(id);
+      if (res?.external_post_id?.includes("mock") || res?.external_post_id?.includes("dryrun")) {
+        toast.info("Published in Sandbox / Test Mode. To publish live to your Facebook Page or Instagram feed, connect your real Meta Page Access Token in Connections.", { duration: 7000 });
+      } else {
+        toast.success("Post published live to platform!");
+      }
       refetchCalendar();
       refetchPosts();
     } catch (err: any) {

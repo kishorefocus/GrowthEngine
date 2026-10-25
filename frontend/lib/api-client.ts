@@ -554,6 +554,11 @@ export const connectionsApi = {
     apiFetch<SocialAccount>(`/connections/connect-mock?platform=${platform}&handle=${encodeURIComponent(handle)}`, {
       method: "POST",
     }),
+  directConnect: (data: { platform: string; handle?: string; external_id?: string; access_token: string }) =>
+    apiFetch<SocialAccount>("/connections/direct", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   disconnect: (id: string) =>
     apiFetch<void>(`/connections/${id}`, { method: "DELETE" }),
 };

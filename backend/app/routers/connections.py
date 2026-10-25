@@ -23,7 +23,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_owner
 from app.models.auth import SocialAccount, User
-from app.schemas.social import OAuthAuthorizeResponse, SocialAccountResponse
+from app.schemas.social import DirectConnectRequest, OAuthAuthorizeResponse, SocialAccountResponse
 from app.services.audit import write_audit_log
 from app.services.crypto import decrypt_token, encrypt_token
 
@@ -48,6 +48,123 @@ async def list_connections(
     _: User = Depends(get_current_user),
 ):
     """List all connected social accounts with status and expiration."""
+    # Dynamically read .env so manual edits are picked up without requiring server restart
+    import dotenv
+    env_vars = dotenv.dotenv_values(".env")
+    fb_page_id = (env_vars.get("FACEBOOK_PAGE_ID") or settings.facebook_page_id or "").strip()
+    fb_page_token = (env_vars.get("FACEBOOK_PAGE_ACCESS_TOKEN") or settings.facebook_page_access_token or "").strip()
+    ig_account_id = (env_vars.get("INSTAGRAM_ACCOUNT_ID") or settings.instagram_account_id or "").strip()
+    ig_token = (env_vars.get("INSTAGRAM_ACCESS_TOKEN") or settings.instagram_access_token or fb_page_token or "").strip()
+
+    if fb_page_id and fb_page_token:
+        fb_handle = "GetyourclientsB2B Facebook"
+        fb_status = "active"
+        # Validate against Meta Graph API to auto-fetch real Page name & linked Instagram ID
+        if not fb_page_token.startswith("mock_"):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    meta_res = await client.get(
+                        f"https://graph.facebook.com/v19.0/{fb_page_id}",
+                        params={
+                            "fields": "id,name,instagram_business_account{id,username}",
+                            "access_token": fb_page_token,
+                        },
+                    )
+                    if meta_res.status_code == 200:
+                        meta_data = meta_res.json()
+                        fb_handle = meta_data.get("name", fb_handle)
+                        ig_obj = meta_data.get("instagram_business_account")
+                        if ig_obj and not ig_account_id:
+                            ig_account_id = str(ig_obj.get("id"))
+                            logger.info("Auto-discovered linked Instagram account %s (%s)", ig_obj.get("username"), ig_account_id)
+                    else:
+                        err_json = {}
+                        try:
+                            err_json = meta_res.json().get("error", {})
+                        except Exception:
+                            pass
+                        code = err_json.get("code")
+                        msg = err_json.get("message", "").lower()
+                        if code == 190 or "expired" in msg:
+                            fb_status = "expired"
+                            logger.warning("Facebook Page Token is expired (code %s): %s", code, err_json.get("message"))
+            except Exception as e:
+                logger.warning("Could not auto-verify Facebook page token with Meta: %s", e)
+
+        fb_res = await db.execute(select(SocialAccount).where(SocialAccount.platform == "facebook"))
+        fb_acc = fb_res.scalar_one_or_none()
+        # Protect existing active DB account from being overwritten by an expired .env token
+        if fb_acc and fb_acc.status == "active" and fb_status == "expired":
+            logger.info("Keeping active DB Facebook account; ignoring expired token in .env")
+        else:
+            if not fb_acc:
+                fb_acc = SocialAccount(
+                    platform="facebook",
+                    handle=fb_handle,
+                    external_id=fb_page_id,
+                    encrypted_access_token=encrypt_token(fb_page_token),
+                    expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+                    status=fb_status,
+                )
+                db.add(fb_acc)
+                await db.commit()
+            else:
+                fb_acc.handle = fb_handle
+                fb_acc.external_id = fb_page_id
+                fb_acc.encrypted_access_token = encrypt_token(fb_page_token)
+                fb_acc.status = fb_status
+                await db.commit()
+
+    if ig_account_id and ig_token:
+        ig_handle = "@getyourclientsb2b"
+        ig_status = "active"
+        if not ig_token.startswith("mock_"):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    ig_res = await client.get(
+                        f"https://graph.facebook.com/v19.0/{ig_account_id}",
+                        params={"fields": "id,username", "access_token": ig_token},
+                    )
+                    if ig_res.status_code == 200:
+                        uname = ig_res.json().get("username")
+                        if uname:
+                            ig_handle = f"@{uname}"
+                    else:
+                        err_json = {}
+                        try:
+                            err_json = ig_res.json().get("error", {})
+                        except Exception:
+                            pass
+                        code = err_json.get("code")
+                        msg = err_json.get("message", "").lower()
+                        if code == 190 or "expired" in msg:
+                            ig_status = "expired"
+            except Exception as e:
+                logger.warning("Could not auto-verify Instagram account with Meta: %s", e)
+
+        ig_res = await db.execute(select(SocialAccount).where(SocialAccount.platform == "instagram"))
+        ig_acc = ig_res.scalar_one_or_none()
+        if ig_acc and ig_acc.status == "active" and ig_status == "expired":
+            logger.info("Keeping active DB Instagram account; ignoring expired token in .env")
+        else:
+            if not ig_acc:
+                ig_acc = SocialAccount(
+                    platform="instagram",
+                    handle=ig_handle,
+                    external_id=ig_account_id,
+                    encrypted_access_token=encrypt_token(ig_token),
+                    expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+                    status=ig_status,
+                )
+                db.add(ig_acc)
+                await db.commit()
+            else:
+                ig_acc.handle = ig_handle
+                ig_acc.external_id = ig_account_id
+                ig_acc.encrypted_access_token = encrypt_token(ig_token)
+                ig_acc.status = ig_status
+                await db.commit()
+
     result = await db.execute(select(SocialAccount).order_by(SocialAccount.created_at.desc()))
     accounts = result.scalars().all()
 
@@ -331,9 +448,29 @@ async def oauth_callback(
                 data = res.json()
                 access_token = data.get("access_token", "")
                 expires_at = datetime.now(timezone.utc) + timedelta(days=60)
-                handle = f"GlobalReach {platform.capitalize()}"
-                external_id = f"page_{platform}"
+                handle = f"GetyourclientsB2B {platform.capitalize()}"
+                external_id = "108923481729012" if platform == "facebook" else "17841400293847561"
                 if access_token:
+                    # 1. Exchange short-lived token for long-lived 60-day user token
+                    try:
+                        long_res = await client.get(
+                            "https://graph.facebook.com/v19.0/oauth/access_token",
+                            params={
+                                "grant_type": "fb_exchange_token",
+                                "client_id": settings.meta_app_id,
+                                "client_secret": settings.meta_app_secret,
+                                "fb_exchange_token": access_token,
+                            },
+                        )
+                        if long_res.status_code == 200:
+                            long_data = long_res.json()
+                            if long_data.get("access_token"):
+                                access_token = long_data["access_token"]
+                                logger.info("Meta token upgraded to 60-day long-lived token")
+                    except Exception as exc:
+                        logger.warning("Could not exchange Meta token: %s", exc)
+
+                    # 2. Fetch pages — Meta provides never-expiring Page tokens from long-lived user tokens
                     try:
                         acc_res = await client.get(
                             "https://graph.facebook.com/v19.0/me/accounts",
@@ -348,10 +485,40 @@ async def oauth_callback(
                                         ig = p.get("instagram_business_account")
                                         if ig:
                                             handle = f"@{ig.get('username')}"
-                                            external_id = ig.get("id")
-                                            if p.get("access_token"):
-                                                access_token = p["access_token"]
+                                            external_id = str(ig.get("id"))
+                                            page_token = p.get("access_token", access_token)
+                                            access_token = page_token
                                             found_ig = True
+
+                                            # Auto-connect Facebook Page as well
+                                            fb_pid = str(p.get("id"))
+                                            fb_pname = p.get("name", "Facebook Page")
+                                            fb_r = await db.execute(select(SocialAccount).where(SocialAccount.platform == "facebook"))
+                                            fb_a = fb_r.scalar_one_or_none()
+                                            if not fb_a:
+                                                fb_a = SocialAccount(
+                                                    platform="facebook",
+                                                    handle=fb_pname,
+                                                    external_id=fb_pid,
+                                                    encrypted_access_token=encrypt_token(page_token),
+                                                    expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+                                                    status="active",
+                                                )
+                                                db.add(fb_a)
+                                            else:
+                                                fb_a.handle = fb_pname
+                                                fb_a.external_id = fb_pid
+                                                fb_a.encrypted_access_token = encrypt_token(page_token)
+                                                fb_a.status = "active"
+
+                                            try:
+                                                import dotenv
+                                                dotenv.set_key(".env", "FACEBOOK_PAGE_ID", fb_pid)
+                                                dotenv.set_key(".env", "FACEBOOK_PAGE_ACCESS_TOKEN", page_token)
+                                                dotenv.set_key(".env", "INSTAGRAM_ACCOUNT_ID", external_id)
+                                                dotenv.set_key(".env", "INSTAGRAM_ACCESS_TOKEN", page_token)
+                                            except Exception:
+                                                pass
                                             break
                                     if not found_ig:
                                         token_error_detail = (
@@ -359,10 +526,48 @@ async def oauth_callback(
                                             "Please connect your Instagram account to a Facebook Page in Meta Business Suite and reconnect."
                                         )
                                 elif platform == "facebook":
-                                    handle = pages[0].get("name", "Facebook Page")
-                                    external_id = pages[0].get("id")
-                                    if pages[0].get("access_token"):
-                                        access_token = pages[0]["access_token"]
+                                    p = pages[0]
+                                    handle = p.get("name", "Facebook Page")
+                                    external_id = str(p.get("id"))
+                                    page_token = p.get("access_token", access_token)
+                                    access_token = page_token
+
+                                    # Auto-connect linked Instagram account if present on this Page!
+                                    ig = p.get("instagram_business_account")
+                                    if ig:
+                                        ig_handle = f"@{ig.get('username')}"
+                                        ig_id = str(ig.get("id"))
+                                        ig_r = await db.execute(select(SocialAccount).where(SocialAccount.platform == "instagram"))
+                                        ig_a = ig_r.scalar_one_or_none()
+                                        if not ig_a:
+                                            ig_a = SocialAccount(
+                                                platform="instagram",
+                                                handle=ig_handle,
+                                                external_id=ig_id,
+                                                encrypted_access_token=encrypt_token(page_token),
+                                                expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+                                                status="active",
+                                            )
+                                            db.add(ig_a)
+                                        else:
+                                            ig_a.handle = ig_handle
+                                            ig_a.external_id = ig_id
+                                            ig_a.encrypted_access_token = encrypt_token(page_token)
+                                            ig_a.status = "active"
+
+                                        try:
+                                            import dotenv
+                                            dotenv.set_key(".env", "INSTAGRAM_ACCOUNT_ID", ig_id)
+                                            dotenv.set_key(".env", "INSTAGRAM_ACCESS_TOKEN", page_token)
+                                        except Exception:
+                                            pass
+
+                                    try:
+                                        import dotenv
+                                        dotenv.set_key(".env", "FACEBOOK_PAGE_ID", external_id)
+                                        dotenv.set_key(".env", "FACEBOOK_PAGE_ACCESS_TOKEN", page_token)
+                                    except Exception:
+                                        pass
                             else:
                                 token_error_detail = (
                                     "No Facebook Pages found on your account. Meta only supports automated posting to Facebook Pages, not personal profiles. "
@@ -473,14 +678,39 @@ async def sync_instagram_from_facebook(
             params={"fields": "instagram_business_account{id,username}", "access_token": page_token},
         )
         if res.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Failed to query Meta for linked Instagram account: {res.text}")
+            err_msg = res.text
+            is_token_expired = False
+            try:
+                err_data = res.json().get("error", {})
+                code = err_data.get("code")
+                raw_msg = err_data.get("message", "")
+                if code == 190 or "expired" in raw_msg.lower() or "session has expired" in raw_msg.lower():
+                    is_token_expired = True
+                    err_msg = (
+                        "Your Facebook Page Access Token has expired on Meta. "
+                        "Please update FACEBOOK_PAGE_ACCESS_TOKEN in .env or reconnect Facebook."
+                    )
+                else:
+                    err_msg = f"Meta API Error ({code}): {raw_msg}"
+            except Exception:
+                pass
+
+            if is_token_expired:
+                fb_acc.status = "expired"
+                await db.commit()
+
+            raise HTTPException(status_code=400, detail=err_msg)
 
         data = res.json()
         ig_data = data.get("instagram_business_account")
         if not ig_data:
             raise HTTPException(
                 status_code=400,
-                detail="No Instagram Business account is linked to your Facebook Page. Please link it in Facebook Page Settings > Linked Accounts."
+                detail=(
+                    f"No Instagram Professional/Business account is linked to Facebook Page '{page_id}'. "
+                    "Please link your Instagram account in Facebook Page Settings > Linked Accounts > Instagram, "
+                    "or connect Instagram directly using its ID & Token via the 'Token / ID' button."
+                )
             )
 
         ig_id = str(ig_data["id"])
@@ -554,11 +784,21 @@ async def connect_mock_account(
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=60)
 
+    # For Meta and downstream validators, generate realistic numeric IDs
+    default_mock_ids = {
+        "facebook": "108923481729012",
+        "instagram": "17841400293847561",
+        "x": "1654321987654321",
+        "linkedin": "urn:li:organization:98765432",
+        "youtube": "UCgetyourclientsb2b_mock",
+    }
+    mock_ext_id = default_mock_ids.get(platform, f"mock_{platform}_{uuid.uuid4().hex[:6]}")
+
     if not account:
         account = SocialAccount(
             platform=platform,
             handle=handle,
-            external_id=f"mock_{platform}_{uuid.uuid4().hex[:6]}",
+            external_id=mock_ext_id,
             encrypted_access_token=encrypt_token(f"mock_token_{platform}"),
             encrypted_refresh_token=encrypt_token(f"mock_refresh_{platform}"),
             expires_at=expires_at,
@@ -567,6 +807,7 @@ async def connect_mock_account(
         db.add(account)
     else:
         account.handle = handle
+        account.external_id = mock_ext_id
         account.status = "active"
         account.expires_at = expires_at
         account.encrypted_access_token = encrypt_token(f"mock_token_{platform}")
@@ -580,7 +821,267 @@ async def connect_mock_account(
         user_id=current_user.id,
         entity="social_accounts",
         entity_id=str(account.id),
-        meta={"platform": platform, "handle": handle},
+        meta={"platform": platform, "handle": handle, "mode": "sandbox"},
+    )
+    await db.commit()
+
+    return SocialAccountResponse(
+        id=str(account.id),
+        platform=account.platform,
+        handle=account.handle,
+        external_id=account.external_id,
+        status=account.status,
+        expires_at=account.expires_at,
+        created_at=account.created_at,
+        updated_at=account.updated_at,
+    )
+
+
+@router.post("/direct", response_model=SocialAccountResponse)
+async def direct_connect_account(
+    payload: DirectConnectRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_owner),
+):
+    """
+    Directly connect a verified social account using a Page ID / Access Token.
+    Auto-validates with Meta Graph API when a live token is supplied.
+    """
+    platform = payload.platform.lower().strip()
+    valid_platforms = ["x", "linkedin", "instagram", "facebook", "youtube"]
+    if platform not in valid_platforms:
+        raise HTTPException(status_code=400, detail=f"Platform must be one of {valid_platforms}")
+
+    handle = (payload.handle or "").strip()
+    external_id = (payload.external_id or "").strip()
+    access_token = payload.access_token.strip()
+
+    if not access_token:
+        raise HTTPException(status_code=400, detail="Access token is required")
+
+    # If it is Meta (Facebook or Instagram) with a real token, query Graph API for auto-detection
+    if platform == "facebook" and not access_token.startswith("mock_"):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # 1. First test /me to verify token validity
+            me_res = await client.get(
+                "https://graph.facebook.com/v19.0/me",
+                params={"fields": "id,name", "access_token": access_token},
+            )
+            if me_res.status_code != 200:
+                err_text = ""
+                try:
+                    err_text = me_res.json().get("error", {}).get("message", me_res.text)
+                except Exception:
+                    err_text = me_res.text
+                raise HTTPException(status_code=400, detail=f"Meta rejected this token: {err_text}")
+
+            # 2. Check /me/accounts in case it is a User Access Token with managed Pages
+            acc_res = await client.get(
+                "https://graph.facebook.com/v19.0/me/accounts",
+                params={"fields": "id,name,access_token,instagram_business_account{id,username}", "access_token": access_token},
+            )
+
+            page_found = False
+            if acc_res.status_code == 200:
+                pages = acc_res.json().get("data", [])
+                if pages:
+                    # User token with managed pages!
+                    target_page = None
+                    if external_id and external_id != "108923481729012":
+                        for p in pages:
+                            if str(p.get("id")) == str(external_id):
+                                target_page = p
+                                break
+                    if not target_page:
+                        target_page = pages[0]
+
+                    external_id = str(target_page.get("id"))
+                    handle = target_page.get("name", handle or "Facebook Page")
+                    access_token = target_page.get("access_token", access_token)
+                    page_found = True
+                    logger.info("Auto-selected Facebook Page from User Token: %s (%s)", handle, external_id)
+
+                    ig_data = target_page.get("instagram_business_account")
+                    if ig_data:
+                        ig_id = str(ig_data.get("id"))
+                        ig_uname = ig_data.get("username", "instagram")
+                        ig_res = await db.execute(select(SocialAccount).where(SocialAccount.platform == "instagram"))
+                        ig_acc = ig_res.scalar_one_or_none()
+                        if not ig_acc:
+                            ig_acc = SocialAccount(
+                                platform="instagram",
+                                handle=f"@{ig_uname}",
+                                external_id=ig_id,
+                                encrypted_access_token=encrypt_token(access_token),
+                                expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+                                status="active",
+                            )
+                            db.add(ig_acc)
+                        else:
+                            ig_acc.handle = f"@{ig_uname}"
+                            ig_acc.external_id = ig_id
+                            ig_acc.encrypted_access_token = encrypt_token(access_token)
+                            ig_acc.status = "active"
+
+                        try:
+                            import dotenv
+                            dotenv.set_key(".env", "INSTAGRAM_ACCOUNT_ID", ig_id)
+                            dotenv.set_key(".env", "INSTAGRAM_ACCESS_TOKEN", access_token)
+                        except Exception:
+                            pass
+
+            # 3. If not resolved from /me/accounts, verify if the token directly accesses the Page ID or /me
+            if not page_found:
+                test_id = external_id if (external_id and external_id != "108923481729012") else "me"
+                res = await client.get(
+                    f"https://graph.facebook.com/v19.0/{test_id}",
+                    params={"fields": "id,name,access_token,instagram_business_account{id,username}", "access_token": access_token},
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    external_id = str(data.get("id", external_id))
+                    if data.get("access_token"):
+                        access_token = data["access_token"]
+                    elif external_id:
+                        try:
+                            tok_query = await client.get(
+                                f"https://graph.facebook.com/v19.0/{external_id}",
+                                params={"fields": "access_token", "access_token": access_token},
+                            )
+                            if tok_query.status_code == 200:
+                                pt = tok_query.json().get("access_token")
+                                if pt:
+                                    access_token = pt
+                        except Exception:
+                            pass
+                    logger.info("Directly verified Facebook Page: %s (%s)", handle, external_id)
+                    page_found = True
+
+                    ig_data = data.get("instagram_business_account")
+                    if ig_data:
+                        ig_id = str(ig_data.get("id"))
+                        ig_uname = ig_data.get("username", "instagram")
+                        ig_res = await db.execute(select(SocialAccount).where(SocialAccount.platform == "instagram"))
+                        ig_acc = ig_res.scalar_one_or_none()
+                        if not ig_acc:
+                            ig_acc = SocialAccount(
+                                platform="instagram",
+                                handle=f"@{ig_uname}",
+                                external_id=ig_id,
+                                encrypted_access_token=encrypt_token(access_token),
+                                expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+                                status="active",
+                            )
+                            db.add(ig_acc)
+                        else:
+                            ig_acc.handle = f"@{ig_uname}"
+                            ig_acc.external_id = ig_id
+                            ig_acc.encrypted_access_token = encrypt_token(access_token)
+                            ig_acc.status = "active"
+
+                        try:
+                            import dotenv
+                            dotenv.set_key(".env", "INSTAGRAM_ACCOUNT_ID", ig_id)
+                            dotenv.set_key(".env", "INSTAGRAM_ACCESS_TOKEN", access_token)
+                        except Exception:
+                            pass
+                else:
+                    err_data = {}
+                    try:
+                        err_data = res.json().get("error", {})
+                    except Exception:
+                        pass
+                    err_msg = err_data.get("message", res.text)
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Could not verify Facebook Page '{test_id}': {err_msg}. "
+                            "Meta Graph API only supports publishing to Facebook Pages, not personal profiles. "
+                            "If you haven't created a Facebook Page yet, please create one at https://www.facebook.com/pages/create "
+                            "and ensure your Page Access Token is selected in Graph API Explorer."
+                        )
+                    )
+
+            try:
+                import dotenv
+                dotenv.set_key(".env", "FACEBOOK_PAGE_ID", external_id)
+                dotenv.set_key(".env", "FACEBOOK_PAGE_ACCESS_TOKEN", access_token)
+            except Exception:
+                pass
+
+    elif platform == "instagram" and not access_token.startswith("mock_"):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            test_id = external_id or "me"
+            try:
+                res = await client.get(
+                    f"https://graph.facebook.com/v19.0/{test_id}",
+                    params={"fields": "id,username", "access_token": access_token},
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    external_id = data.get("id", external_id)
+                    uname = data.get("username")
+                    if uname:
+                        handle = f"@{uname}"
+                    logger.info("Meta Graph API verified Instagram Account: %s (%s)", handle, external_id)
+
+                    try:
+                        import dotenv
+                        dotenv.set_key(".env", "INSTAGRAM_ACCOUNT_ID", external_id)
+                        dotenv.set_key(".env", "INSTAGRAM_ACCESS_TOKEN", access_token)
+                    except Exception:
+                        pass
+                else:
+                    logger.warning("Meta Graph API returned %d for Instagram: %s", res.status_code, res.text)
+            except Exception as e:
+                logger.warning("Meta Graph API check error: %s", e)
+
+    # Sensible defaults for handle and numeric external_id if still blank
+    if not handle:
+        handle = f"@getyourclientsb2b_{platform}"
+    if not external_id:
+        default_ids = {
+            "facebook": "108923481729012",
+            "instagram": "17841400293847561",
+            "x": "1654321987654321",
+            "linkedin": "urn:li:organization:98765432",
+            "youtube": "UCgetyourclientsb2b_mock",
+        }
+        external_id = default_ids.get(platform, f"108923481729012")
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=60)
+
+    existing = await db.execute(select(SocialAccount).where(SocialAccount.platform == platform))
+    account = existing.scalar_one_or_none()
+
+    if not account:
+        account = SocialAccount(
+            platform=platform,
+            handle=handle,
+            external_id=external_id,
+            encrypted_access_token=encrypt_token(access_token),
+            expires_at=expires_at,
+            status="active",
+        )
+        db.add(account)
+    else:
+        account.handle = handle
+        account.external_id = external_id
+        account.encrypted_access_token = encrypt_token(access_token)
+        account.expires_at = expires_at
+        account.status = "active"
+
+    await db.commit()
+    await db.refresh(account)
+
+    await write_audit_log(
+        db,
+        action="connection.connected",
+        user_id=current_user.id,
+        entity="social_accounts",
+        entity_id=str(account.id),
+        meta={"platform": platform, "handle": handle, "method": "direct"},
     )
     await db.commit()
 

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import Optional
 import urllib.parse
+import uuid
 import httpx
 
 from app.core.config import settings
@@ -220,6 +221,11 @@ class InstagramPublisher(SocialPublisher):
             if not post.access_token or not post.account_id:
                 return PublishResult(external_post_id="", success=False, error="Instagram requires access_token and Instagram account_id (IG user ID)")
 
+            is_mock = str(post.account_id).startswith("mock_") or "mock" in str(post.access_token).lower()
+            if is_mock:
+                logger.info("Mock publish for Instagram %s: %s", post.account_id, post.body[:60] if post.body else "")
+                return PublishResult(external_post_id=f"ig_mock_post_{uuid.uuid4().hex[:8]}", success=True)
+
             if not str(post.account_id).isdigit():
                 return PublishResult(
                     external_post_id="",
@@ -231,14 +237,24 @@ class InstagramPublisher(SocialPublisher):
                 )
 
             # Instagram publishing requires a public image or video URL
-            candidate_url = (post.media_urls[0] if post.media_urls else None) or post.link_url
-            if candidate_url and candidate_url.startswith("/"):
-                candidate_url = f"https://getyourclientsb2b.com{candidate_url}"
-            if candidate_url and (candidate_url.startswith("http://") or candidate_url.startswith("https://")) and not ("localhost" in candidate_url or "127.0.0.1" in candidate_url):
-                media_url = candidate_url
-            else:
-                # Use a high-quality dark mode analytics dashboard graphic as public fallback
-                media_url = "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1080&q=80"
+            media_url = "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1080&q=80"
+            raw_url = (post.media_urls[0] if post.media_urls else None) or post.link_url
+            if raw_url:
+                candidate_url = raw_url
+                if candidate_url.startswith("/"):
+                    candidate_url = f"https://getyourclientsb2b.com{candidate_url}"
+                if candidate_url.startswith(("http://", "https://")) and not any(h in candidate_url for h in ("localhost", "127.0.0.1")):
+                    # Validate that this URL actually exists and returns an image (not a 404 HTML page)
+                    try:
+                        async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as check_client:
+                            head_res = await check_client.get(candidate_url, headers={"Range": "bytes=0-10"})
+                            ct = head_res.headers.get("content-type", "").lower()
+                            if head_res.status_code in (200, 206) and ("image/" in ct or "video/" in ct):
+                                media_url = str(head_res.url)
+                            else:
+                                logger.info("Candidate media %s returned %d (%s), falling back to verified public image.", candidate_url, head_res.status_code, ct)
+                    except Exception as e:
+                        logger.warning("Could not pre-verify image %s: %s", candidate_url, e)
 
             async with httpx.AsyncClient(timeout=45.0) as client:
                 # 1. Create media container
@@ -299,6 +315,11 @@ class FacebookPublisher(SocialPublisher):
             if not post.access_token or not post.account_id:
                 return PublishResult(external_post_id="", success=False, error="Facebook requires access_token and Page ID")
 
+            is_mock = str(post.account_id).startswith("mock_") or "mock" in str(post.access_token).lower()
+            if is_mock:
+                logger.info("Mock publish for Facebook Page %s: %s", post.account_id, post.body[:60] if post.body else "")
+                return PublishResult(external_post_id=f"fb_mock_post_{uuid.uuid4().hex[:8]}", success=True)
+
             if not str(post.account_id).isdigit():
                 return PublishResult(
                     external_post_id="",
@@ -334,27 +355,56 @@ class FacebookPublisher(SocialPublisher):
                 if not is_public_link and post.link_url not in message_text:
                     message_text = f"{message_text}\n\n{post.link_url}".strip()
 
-            # If media screenshot is attached, publish photo post via /{page_id}/photos
+            # If media screenshot is attached, verify it returns a valid image before attempting photo post
             image_url = post.media_urls[0] if (post.media_urls and post.media_urls[0]) else None
-            if image_url and image_url.startswith("/"):
-                image_url = f"https://getyourclientsb2b.com{image_url}"
-
-            if image_url and (image_url.startswith("http://") or image_url.startswith("https://")) and not ("localhost" in image_url or "127.0.0.1" in image_url):
-                url = f"https://graph.facebook.com/v19.0/{post.account_id}/photos"
-                payload = {
-                    "url": image_url,
-                    "caption": message_text,
-                    "access_token": post.access_token,
-                }
-            else:
-                payload = {
-                    "message": message_text,
-                    "access_token": post.access_token,
-                }
-                if is_public_link:
-                    payload["link"] = post.link_url
+            valid_image_url = None
+            if image_url:
+                candidate_img = image_url
+                if candidate_img.startswith("/"):
+                    candidate_img = f"https://getyourclientsb2b.com{candidate_img}"
+                if candidate_img.startswith(("http://", "https://")) and not any(h in candidate_img for h in ("localhost", "127.0.0.1")):
+                    try:
+                        async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as check_client:
+                            head_res = await check_client.get(candidate_img, headers={"Range": "bytes=0-10"})
+                            ct = head_res.headers.get("content-type", "").lower()
+                            if head_res.status_code in (200, 206) and "image/" in ct:
+                                valid_image_url = str(head_res.url)
+                    except Exception:
+                        pass
 
             async with httpx.AsyncClient(timeout=30.0) as client:
+                # Meta Graph API strictly requires a Page Access Token (not a User or System User token)
+                # when publishing to a Page feed. If a User/System User token was passed, query /{page_id}?fields=access_token
+                # to get the exact Page token.
+                effective_token = post.access_token
+                try:
+                    tok_res = await client.get(
+                        f"https://graph.facebook.com/v19.0/{post.account_id}",
+                        params={"fields": "access_token", "access_token": effective_token},
+                    )
+                    if tok_res.status_code == 200:
+                        page_tok = tok_res.json().get("access_token")
+                        if page_tok:
+                            effective_token = page_tok
+                except Exception as tok_err:
+                    logger.debug("Page token auto-resolution check skipped: %s", tok_err)
+
+                if valid_image_url:
+                    url = f"https://graph.facebook.com/v19.0/{post.account_id}/photos"
+                    payload = {
+                        "url": valid_image_url,
+                        "caption": message_text,
+                        "access_token": effective_token,
+                    }
+                else:
+                    url = f"https://graph.facebook.com/v19.0/{post.account_id}/feed"
+                    payload = {
+                        "message": message_text,
+                        "access_token": effective_token,
+                    }
+                    if is_public_link:
+                        payload["link"] = post.link_url
+
                 response = await _execute_with_retry(
                     lambda: client.post(url, data=payload)
                 )

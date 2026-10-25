@@ -478,6 +478,15 @@ export function useConnectMock() {
   });
 }
 
+export function useDirectConnect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { platform: string; handle?: string; external_id?: string; access_token: string }) =>
+      connectionsApi.directConnect(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: prompt3Keys.connections }),
+  });
+}
+
 export function useDisconnectAccount() {
   const qc = useQueryClient();
   return useMutation({

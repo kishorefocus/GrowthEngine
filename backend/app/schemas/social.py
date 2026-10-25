@@ -31,6 +31,13 @@ class OAuthCallbackRequest(BaseModel):
     state: Optional[str] = None
 
 
+class DirectConnectRequest(BaseModel):
+    platform: str
+    handle: Optional[str] = None
+    external_id: Optional[str] = None
+    access_token: str
+
+
 # ─── Content Ideas ────────────────────────────────────────────────────────────
 
 class IdeaCreate(BaseModel):

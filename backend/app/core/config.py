@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     linkedin_client_secret: str = ""
     meta_app_id: str = ""
     meta_app_secret: str = ""
+    facebook_page_id: str = ""
+    facebook_page_access_token: str = ""
+    instagram_account_id: str = ""
+    instagram_access_token: str = ""
     google_client_id: str = ""
     google_client_secret: str = ""
 
@@ -121,6 +125,13 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def reload_settings() -> Settings:
+    get_settings.cache_clear()
+    global settings
+    settings = get_settings()
+    return settings
 
 
 settings = get_settings()
