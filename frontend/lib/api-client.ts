@@ -529,6 +529,7 @@ export interface CalendarItem {
   status: string;
   scheduled_at: string;
   published_at?: string;
+  external_post_id?: string;
   error?: string;
 }
 

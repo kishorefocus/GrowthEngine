@@ -179,7 +179,7 @@ async def generate_weekly_content_batch(ctx: Optional[dict] = None, db: Optional
                 link_to_use = dest_url if (not settings.api_url or "localhost" in settings.api_url or "127.0.0.1" in settings.api_url) else f"{settings.api_url}/r/{short_code}"
 
                 body = f"{idea.topic}\n\nFull guide and verified workflows: {link_to_use}"
-                media_urls = get_all_screenshots_for_content(dest_url) if plat in ("instagram", "facebook") else None
+                media_urls = get_all_screenshots_for_content(dest_url)
                 post = Post(
                     idea_id=idea.id,
                     platform=plat,

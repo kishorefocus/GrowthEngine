@@ -13,10 +13,14 @@ and respect DRY_RUN via dry_run_guard.
 from abc import ABC, abstractmethod
 import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import Optional
+import os
+import re
 import urllib.parse
 import uuid
+import dotenv
 import httpx
 
 from app.core.config import settings
@@ -148,23 +152,120 @@ class XPublisher(SocialPublisher):
 
 class LinkedInPublisher(SocialPublisher):
     """
-    LinkedIn Posts API publisher for organization page.
+    LinkedIn Posts API publisher for personal profiles and organization pages.
     Endpoint: POST https://api.linkedin.com/rest/posts
     """
+
+    @staticmethod
+    def _get_api_version() -> str:
+        env_vars = dotenv.dotenv_values(".env")
+        custom_ver = (
+            env_vars.get("LINKEDIN_API_VERSION")
+            or getattr(settings, "linkedin_api_version", "")
+            or ""
+        ).strip()
+        if custom_ver:
+            return custom_ver
+        return datetime.now(timezone.utc).strftime("%Y%m")
+
+    @staticmethod
+    def _resolve_author_urn(account_id: Optional[str]) -> str:
+        env_vars = dotenv.dotenv_values(".env")
+        org_id = (
+            env_vars.get("LINKEDIN_ORGANIZATION_ID")
+            or getattr(settings, "linkedin_organization_id", "")
+            or ""
+        ).strip()
+
+        if account_id and account_id.startswith("urn:li:"):
+            return account_id
+        if org_id:
+            clean_org = org_id.removeprefix("urn:li:organization:")
+            return f"urn:li:organization:{clean_org}"
+        if account_id and account_id.startswith("org_"):
+            clean_org = account_id.removeprefix("org_")
+            return f"urn:li:organization:{clean_org}"
+        if account_id and account_id != "self":
+            return f"urn:li:person:{account_id}"
+        return "urn:li:person:self"
+
+    @staticmethod
+    async def _upload_image_to_linkedin(
+        client: httpx.AsyncClient, author_urn: str, access_token: str, version: str, img_ref: str
+    ) -> Optional[str]:
+        """Upload a local or remote screenshot to LinkedIn and return the image asset URN."""
+        try:
+            file_path = None
+            if img_ref.startswith("/screenshots/"):
+                fname = os.path.basename(img_ref)
+                base_dir = os.path.join(os.path.dirname(__file__), "..", "static", "screenshots")
+                candidate = os.path.join(base_dir, fname)
+                if os.path.exists(candidate):
+                    file_path = candidate
+            elif os.path.exists(img_ref):
+                file_path = img_ref
+
+            img_data = None
+            if file_path:
+                with open(file_path, "rb") as f:
+                    img_data = f.read()
+            elif img_ref.startswith("http://") or img_ref.startswith("https://"):
+                dl_res = await client.get(img_ref, timeout=15.0)
+                if dl_res.status_code == 200:
+                    img_data = dl_res.content
+
+            if not img_data:
+                return None
+
+            init_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "LinkedIn-Version": version,
+                "X-Restli-Protocol-Version": "2.0.0",
+                "Content-Type": "application/json",
+            }
+            init_body = {
+                "initializeUploadRequest": {
+                    "owner": author_urn
+                }
+            }
+            init_res = await client.post(
+                "https://api.linkedin.com/rest/images?action=initializeUpload",
+                json=init_body,
+                headers=init_headers,
+            )
+            if init_res.status_code not in (200, 201):
+                logger.warning("LinkedIn image initializeUpload failed (%d): %s", init_res.status_code, init_res.text)
+                return None
+
+            val = init_res.json().get("value", {})
+            upload_url = val.get("uploadUrl")
+            image_urn = val.get("image")
+            if not upload_url or not image_urn:
+                return None
+
+            put_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "image/png",
+            }
+            put_res = await client.put(upload_url, content=img_data, headers=put_headers)
+            if put_res.status_code not in (200, 201):
+                logger.warning("LinkedIn image upload binary failed (%d): %s", put_res.status_code, put_res.text)
+                return None
+
+            logger.info("Successfully uploaded screenshot to LinkedIn: %s", image_urn)
+            return image_urn
+        except Exception as exc:
+            logger.warning("LinkedIn screenshot upload exception: %s", exc)
+            return None
 
     async def publish(self, post: PostPayload) -> PublishResult:
         async def _do_publish():
             if not post.access_token:
                 return PublishResult(external_post_id="", success=False, error="No access token provided for LinkedIn")
 
-            author_urn = f"urn:li:organization:{post.account_id}" if post.account_id else f"urn:li:person:{post.account_id or 'self'}"
+            author_urn = self._resolve_author_urn(post.account_id)
+            version = self._get_api_version()
             url = "https://api.linkedin.com/rest/posts"
-            headers = {
-                "Authorization": f"Bearer {post.access_token}",
-                "Content-Type": "application/json",
-                "LinkedIn-Version": "202401",
-                "X-Restli-Protocol-Version": "2.0.0",
-            }
 
             commentary_text = post.body or ""
             if post.link_url and post.link_url not in commentary_text:
@@ -183,13 +284,51 @@ class LinkedInPublisher(SocialPublisher):
                 "isReshareDisabledByAuthor": False,
             }
 
+            headers = {
+                "Authorization": f"Bearer {post.access_token}",
+                "Content-Type": "application/json",
+                "LinkedIn-Version": version,
+                "X-Restli-Protocol-Version": "2.0.0",
+            }
+
             async with httpx.AsyncClient(timeout=30.0) as client:
+                # If post has screenshots, upload primary screenshot to LinkedIn
+                if post.media_urls and post.media_urls[0]:
+                    image_urn = await self._upload_image_to_linkedin(
+                        client, author_urn, post.access_token, version, post.media_urls[0]
+                    )
+                    if image_urn:
+                        payload["content"] = {
+                            "media": {
+                                "id": image_urn,
+                                "altText": "GetyourclientsB2B Platform Screenshot",
+                            }
+                        }
+
                 response = await _execute_with_retry(
                     lambda: client.post(url, json=payload, headers=headers)
                 )
 
+                # Automatic recovery for 426 NONEXISTENT_VERSION (fallback to previous active month)
+                if response.status_code == 426 and "NONEXISTENT_VERSION" in response.text:
+                    fallback_version = (datetime.now(timezone.utc) - timedelta(days=35)).strftime("%Y%m")
+                    if fallback_version != version:
+                        logger.warning("LinkedIn version %s expired. Retrying with fallback %s", version, fallback_version)
+                        headers["LinkedIn-Version"] = fallback_version
+                        response = await _execute_with_retry(
+                            lambda: client.post(url, json=payload, headers=headers)
+                        )
+
                 if response.status_code not in (200, 201):
                     err_text = response.text
+                    # LinkedIn anti-spam prevents posting identical content within a short window.
+                    # If this exact content is already published on LinkedIn, capture the existing share URN and succeed.
+                    if "DUPLICATE_POST" in err_text:
+                        match = re.search(r"urn:li:[a-zA-Z0-9_:]+", err_text)
+                        existing_urn = match.group(0) if match else "urn:li:share:duplicate"
+                        logger.info("LinkedIn post already live (duplicate detected, referenced URN: %s)", existing_urn)
+                        return PublishResult(external_post_id=existing_urn, success=True)
+
                     logger.error("LinkedIn Posts API error %d: %s", response.status_code, err_text)
                     return PublishResult(
                         external_post_id="",
@@ -242,7 +381,7 @@ class InstagramPublisher(SocialPublisher):
             if raw_url:
                 candidate_url = raw_url
                 if candidate_url.startswith("/"):
-                    candidate_url = f"https://getyourclientsb2b.com{candidate_url}"
+                    candidate_url = f"https://www.getyourclientsb2b.com{candidate_url}"
                 if candidate_url.startswith(("http://", "https://")) and not any(h in candidate_url for h in ("localhost", "127.0.0.1")):
                     # Validate that this URL actually exists and returns an image (not a 404 HTML page)
                     try:
@@ -361,7 +500,7 @@ class FacebookPublisher(SocialPublisher):
             if image_url:
                 candidate_img = image_url
                 if candidate_img.startswith("/"):
-                    candidate_img = f"https://getyourclientsb2b.com{candidate_img}"
+                    candidate_img = f"https://www.getyourclientsb2b.com{candidate_img}"
                 if candidate_img.startswith(("http://", "https://")) and not any(h in candidate_img for h in ("localhost", "127.0.0.1")):
                     try:
                         async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as check_client:

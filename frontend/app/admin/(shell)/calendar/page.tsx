@@ -42,6 +42,25 @@ const PLATFORMS = [
   { id: "youtube", name: "YouTube", color: "#f87171", bg: "bg-red-500/15 text-red-400 border-red-500/20" },
 ];
 
+function getLivePostUrl(platform: string, externalId?: string): string | null {
+  if (!externalId || externalId.includes("mock") || externalId.includes("dryrun")) return null;
+  const plat = platform.toLowerCase();
+  if (plat === "linkedin") {
+    return `https://www.linkedin.com/feed/update/${encodeURIComponent(externalId)}/`;
+  }
+  if (plat === "x") {
+    return `https://x.com/i/status/${externalId}`;
+  }
+  if (plat === "facebook") {
+    if (externalId.includes("_")) {
+      const parts = externalId.split("_");
+      return `https://www.facebook.com/${parts[0]}/posts/${parts[1]}`;
+    }
+    return `https://www.facebook.com/${externalId}`;
+  }
+  return null;
+}
+
 function PostMediaGallery({ mediaUrls, platform }: { mediaUrls?: string[]; platform: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -440,6 +459,18 @@ export default function CalendarPage() {
                         </span>
 
                         <div className="flex items-center gap-1.5">
+                          {item.status === "published" && item.external_post_id && getLivePostUrl(item.platform, item.external_post_id) && (
+                            <a
+                              href={getLivePostUrl(item.platform, item.external_post_id)!}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-all"
+                              title="Open live post in new tab"
+                            >
+                              <ExternalLink className="w-2.5 h-2.5" />
+                              View Live
+                            </a>
+                          )}
                           {item.status !== "published" && (
                             <button
                               onClick={() => handlePublishNow(item.id)}
@@ -558,6 +589,9 @@ export default function CalendarPage() {
                         <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed pl-10">
                           {post.body}
                         </p>
+                        <div className="pl-10">
+                          <PostMediaGallery mediaUrls={post.media_urls} platform="x" />
+                        </div>
                         <div className="text-[10px] text-slate-500 font-mono pl-10 pt-1">
                           Character count: {post.body?.length || 0} / 280 (X v2 compliant)
                         </div>
@@ -565,7 +599,7 @@ export default function CalendarPage() {
                     )}
 
                     {post.platform === "linkedin" && (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded bg-blue-600 flex items-center justify-center text-xs font-bold text-white">
                             GC
@@ -578,6 +612,7 @@ export default function CalendarPage() {
                         <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">
                           {post.body}
                         </p>
+                        <PostMediaGallery mediaUrls={post.media_urls} platform="linkedin" />
                         <div className="text-[10px] text-slate-500 font-mono pt-1">
                           Length: {post.body?.length || 0} characters (Target 800 - 1,300)
                         </div>

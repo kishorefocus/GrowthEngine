@@ -26,7 +26,7 @@ async def get_brand_profile(
     if not profile:
         profile = BrandProfile(
             product_name="GetyourclientsB2B",
-            website_url="https://getyourclientsb2b.com",
+            website_url="https://www.getyourclientsb2b.com",
             one_liner="B2B client discovery & cold outreach CRM across 190+ countries",
             value_props=["Interactive global map discovery", "Verified B2B emails & contacts", "Cold outreach CRM & automated sequences"],
             tone="professional, direct, honest",

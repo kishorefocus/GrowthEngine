@@ -152,6 +152,7 @@ class CalendarItem(BaseModel):
     status: str
     scheduled_at: datetime
     published_at: Optional[datetime] = None
+    external_post_id: Optional[str] = None
     error: Optional[str] = None
 
 

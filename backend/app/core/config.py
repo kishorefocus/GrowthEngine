@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     x_client_secret: str = ""
     linkedin_client_id: str = ""
     linkedin_client_secret: str = ""
+    linkedin_api_version: str = ""
+    linkedin_organization_id: str = ""
     meta_app_id: str = ""
     meta_app_secret: str = ""
     facebook_page_id: str = ""

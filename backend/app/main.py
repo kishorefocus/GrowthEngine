@@ -183,6 +183,10 @@ _static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(_static_dir):
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
+_screenshots_dir = os.path.join(os.path.dirname(__file__), "static", "screenshots")
+if os.path.exists(_screenshots_dir):
+    app.mount("/screenshots", StaticFiles(directory=_screenshots_dir), name="screenshots")
+
 
 # ─── /api/v1/auth/me convenience endpoint ───────────────────────────────────
 

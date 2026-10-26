@@ -75,21 +75,33 @@ class _SocialAdaptSchema(BaseModel):
 
 
 TARGET_ROUTES = [
-    "https://getyourclientsb2b.com/",
-    "https://getyourclientsb2b.com/#product",
-    "https://getyourclientsb2b.com/#how-it-works",
-    "https://getyourclientsb2b.com/#industries",
-    "https://getyourclientsb2b.com/pricing",
-    "https://getyourclientsb2b.com/contact",
+    "https://www.getyourclientsb2b.com/",
+    "https://www.getyourclientsb2b.com/#overview",
+    "https://www.getyourclientsb2b.com/#product",
+    "https://www.getyourclientsb2b.com/#how-it-works",
+    "https://www.getyourclientsb2b.com/#industries",
+    "https://www.getyourclientsb2b.com/#discovery",
+    "https://www.getyourclientsb2b.com/#pipeline",
+    "https://www.getyourclientsb2b.com/#inbox",
+    "https://www.getyourclientsb2b.com/#calls",
+    "https://www.getyourclientsb2b.com/#analytics",
+    "https://www.getyourclientsb2b.com/pricing",
+    "https://www.getyourclientsb2b.com/contact",
 ]
 
 ROUTE_SCREENSHOT_MAP = {
-    "https://getyourclientsb2b.com/": "/screenshots/home.png",
-    "https://getyourclientsb2b.com/#product": "/screenshots/product.png",
-    "https://getyourclientsb2b.com/#how-it-works": "/screenshots/how-it-works.png",
-    "https://getyourclientsb2b.com/#industries": "/screenshots/industries.png",
-    "https://getyourclientsb2b.com/pricing": "/screenshots/pricing.png",
-    "https://getyourclientsb2b.com/contact": "/screenshots/contact.png",
+    "https://www.getyourclientsb2b.com/": "/screenshots/home.png",
+    "https://www.getyourclientsb2b.com/#overview": "/screenshots/overview.png",
+    "https://www.getyourclientsb2b.com/#product": "/screenshots/product.png",
+    "https://www.getyourclientsb2b.com/#how-it-works": "/screenshots/how-it-works.png",
+    "https://www.getyourclientsb2b.com/#industries": "/screenshots/industries.png",
+    "https://www.getyourclientsb2b.com/#discovery": "/screenshots/discovery.png",
+    "https://www.getyourclientsb2b.com/#pipeline": "/screenshots/pipeline.png",
+    "https://www.getyourclientsb2b.com/#inbox": "/screenshots/inbox.png",
+    "https://www.getyourclientsb2b.com/#calls": "/screenshots/calls.png",
+    "https://www.getyourclientsb2b.com/#analytics": "/screenshots/analytics.png",
+    "https://www.getyourclientsb2b.com/pricing": "/screenshots/pricing.png",
+    "https://www.getyourclientsb2b.com/contact": "/screenshots/contact.png",
 }
 
 ALL_FOLDER_SCREENSHOTS = [
@@ -111,13 +123,37 @@ ALL_FOLDER_SCREENSHOTS = [
 
 
 def get_screenshot_for_route(route: str) -> str:
-    """Return local screenshot path for a given route on https://getyourclientsb2b.com."""
+    """Return local screenshot path for a given route on https://www.getyourclientsb2b.com."""
     if not route:
         return "/screenshots/home.png"
-    clean_route = route.rstrip("/")
+    clean_route = route.rstrip("/").replace("://getyourclientsb2b.com", "://www.getyourclientsb2b.com")
     for target, screenshot in ROUTE_SCREENSHOT_MAP.items():
-        if target.rstrip("/") == clean_route or (target != "https://getyourclientsb2b.com/" and target in route):
+        clean_target = target.rstrip("/")
+        if clean_target == clean_route or (clean_target != "https://www.getyourclientsb2b.com" and clean_target in clean_route):
             return screenshot
+    lower = route.lower()
+    if "pricing" in lower:
+        return "/screenshots/pricing.png"
+    if "contact" in lower:
+        return "/screenshots/contact.png"
+    if "how-it-works" in lower or "works" in lower:
+        return "/screenshots/how-it-works.png"
+    if "industr" in lower:
+        return "/screenshots/industries.png"
+    if "discovery" in lower or "leads" in lower:
+        return "/screenshots/discovery.png"
+    if "pipeline" in lower or "campaign" in lower:
+        return "/screenshots/pipeline.png"
+    if "inbox" in lower:
+        return "/screenshots/inbox.png"
+    if "call" in lower:
+        return "/screenshots/calls.png"
+    if "analytic" in lower:
+        return "/screenshots/analytics.png"
+    if "product" in lower:
+        return "/screenshots/product.png"
+    if "overview" in lower:
+        return "/screenshots/overview.png"
     return "/screenshots/home.png"
 
 
@@ -147,7 +183,7 @@ def get_all_folder_screenshots() -> list[str]:
 
 def get_all_screenshots_for_content(primary_route: Optional[str] = None) -> list[str]:
     """
-    Return all 14 screenshot images from the screenshots folder.
+    Return all screenshot images from the screenshots folder.
     Places the primary route's matching screenshot first, followed by all other screenshots,
     ensuring every post content includes all images inside this folder.
     """
@@ -159,16 +195,17 @@ def get_all_screenshots_for_content(primary_route: Optional[str] = None) -> list
 
 def get_varied_destination_url(topic_or_pillar: str = "", platform: str = "", seed: Optional[str] = None) -> str:
     """
-    Select an appropriate destination route on https://getyourclientsb2b.com
-    rotating across varied real routes (/, /#product, /#how-it-works, /#industries, /pricing, /contact).
+    Select an appropriate destination route on https://www.getyourclientsb2b.com
+    rotating across varied real routes (/, /#overview, /#product, /#how-it-works, /#industries,
+    /#discovery, /#pipeline, /#inbox, /#calls, /#analytics, /pricing, /contact).
     Guarantees every platform in a batch and every new post gets a different route.
     """
     platform_offset = {
-        "x": 0,          # https://getyourclientsb2b.com/
-        "linkedin": 1,   # https://getyourclientsb2b.com/#product
-        "facebook": 2,   # https://getyourclientsb2b.com/#how-it-works
-        "instagram": 3,  # https://getyourclientsb2b.com/#industries
-        "youtube": 4,    # https://getyourclientsb2b.com/pricing
+        "x": 0,          # https://www.getyourclientsb2b.com/
+        "linkedin": 2,   # https://www.getyourclientsb2b.com/#product
+        "facebook": 3,   # https://www.getyourclientsb2b.com/#how-it-works
+        "instagram": 4,  # https://www.getyourclientsb2b.com/#industries
+        "youtube": 10,   # https://www.getyourclientsb2b.com/pricing
     }
     base_idx = platform_offset.get(platform.lower(), 0)
     if seed:
@@ -365,8 +402,8 @@ async def generate_platform_posts(
     created_posts: list[Post] = []
 
     platform_configs = [
-        ("x", adapted_data.x.body, None, base_time, x_dest),
-        ("linkedin", adapted_data.linkedin.body, None, base_time + timedelta(hours=2), li_dest),
+        ("x", adapted_data.x.body, get_all_screenshots_for_content(x_dest), base_time, x_dest),
+        ("linkedin", adapted_data.linkedin.body, get_all_screenshots_for_content(li_dest), base_time + timedelta(hours=2), li_dest),
         ("instagram", adapted_data.instagram.caption, get_all_screenshots_for_content(ig_dest), base_time + timedelta(hours=4), ig_dest),
         ("facebook", adapted_data.facebook.body, get_all_screenshots_for_content(fb_dest), base_time + timedelta(hours=6), fb_dest),
     ]
@@ -406,6 +443,8 @@ async def generate_platform_posts(
         elif live_link not in body_with_link and plat_dest_url not in body_with_link:
             if plat in ("facebook", "x"):
                 body_with_link += f" {live_link}"
+            elif plat == "linkedin":
+                body_with_link += f"\n\n{live_link}"
             elif plat == "instagram":
                 body_with_link += f"\n\n🔗 {live_link}"
 
@@ -702,6 +741,7 @@ async def get_calendar(
             status=p.status,
             scheduled_at=p.scheduled_at,
             published_at=p.published_at,
+            external_post_id=p.external_post_id,
             error=p.error,
         )
         for p in posts
