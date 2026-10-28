@@ -145,7 +145,8 @@ from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
-async def get_worker_session(ctx: dict):
+async def get_worker_session(ctx: Optional[dict] = None):
+    ctx = ctx or {}
     if "db" in ctx:
         yield ctx["db"]
     else:
@@ -155,7 +156,7 @@ async def get_worker_session(ctx: dict):
 
 # ─── 1-Minute Job: send_due_emails ───────────────────────────────────────────
 
-async def send_due_emails(ctx: dict) -> dict:
+async def send_due_emails(ctx: Optional[dict] = None) -> dict:
     """
     ARQ scheduled job running every 1 minute:
     - Enforces active campaign status
@@ -168,6 +169,7 @@ async def send_due_emails(ctx: dict) -> dict:
     - Dispatches with random jitter
     - Automatically enrolls next step when current step completes
     """
+    ctx = ctx or {}
     logger.info("[send_due_emails] Starting due emails check at %s", datetime.now(timezone.utc).isoformat())
 
     email_provider = get_email_provider()
@@ -408,7 +410,7 @@ async def send_due_emails(ctx: dict) -> dict:
 
 # ─── 15-Minute Job: check_campaign_health ────────────────────────────────────
 
-async def check_campaign_health(ctx: dict) -> dict:
+async def check_campaign_health(ctx: Optional[dict] = None) -> dict:
     """
     ARQ scheduled job running every 15 minutes:
     - Calculates bounce rate and complaint rate for active campaigns.
@@ -474,7 +476,7 @@ async def check_campaign_health(ctx: dict) -> dict:
 
 # ─── Event Queue Worker: process_email_events ─────────────────────────────────
 
-async def process_email_events(ctx: dict) -> dict:
+async def process_email_events(ctx: Optional[dict] = None) -> dict:
     """Continuous or batched email event processing."""
     logger.info("[process_email_events] Running event processor")
     return {"status": "ok"}

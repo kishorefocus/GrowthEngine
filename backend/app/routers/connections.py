@@ -15,7 +15,9 @@ import urllib.parse
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse
 import httpx
+import dotenv
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -165,6 +167,56 @@ async def list_connections(
                 ig_acc.status = ig_status
                 await db.commit()
 
+    # Direct LinkedIn Page/Personal Token & Organization ID auto-sync
+    li_token = (
+        getattr(settings, "linkedin_page_access_token", "")
+        or env_vars.get("LINKEDIN_PAGE_ACCESS_TOKEN", "")
+        or env_vars.get("LINKEDIN_ACCESS_TOKEN", "")
+        or ""
+    ).strip().strip("'\"")
+    li_org_id = (
+        getattr(settings, "linkedin_organization_id", "")
+        or env_vars.get("LINKEDIN_ORGANIZATION_ID", "")
+        or ""
+    ).strip().strip("'\"")
+
+    if li_token:
+        li_handle = "GetYourClients B2B" if li_org_id else "Kishore c"
+        li_external_id = li_org_id if li_org_id else "self"
+        if not li_org_id and not li_token.startswith("mock_"):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    me_res = await client.get(
+                        "https://api.linkedin.com/v2/userinfo",
+                        headers={"Authorization": f"Bearer {li_token}"},
+                    )
+                    if me_res.status_code == 200:
+                        me_data = me_res.json()
+                        li_handle = me_data.get("name") or "Kishore c"
+                        li_external_id = me_data.get("sub") or "self"
+            except Exception as e:
+                logger.warning("Could not auto-verify LinkedIn personal token: %s", e)
+
+        li_res = await db.execute(select(SocialAccount).where(SocialAccount.platform == "linkedin"))
+        li_acc = li_res.scalar_one_or_none()
+        if not li_acc:
+            li_acc = SocialAccount(
+                platform="linkedin",
+                handle=li_handle,
+                external_id=li_external_id,
+                encrypted_access_token=encrypt_token(li_token),
+                expires_at=datetime.now(timezone.utc) + timedelta(days=60),
+                status="active",
+            )
+            db.add(li_acc)
+            await db.commit()
+        else:
+            li_acc.handle = li_handle
+            li_acc.external_id = li_external_id
+            li_acc.encrypted_access_token = encrypt_token(li_token)
+            li_acc.status = "active"
+            await db.commit()
+
     result = await db.execute(select(SocialAccount).order_by(SocialAccount.created_at.desc()))
     accounts = result.scalars().all()
 
@@ -243,7 +295,9 @@ async def get_oauth_authorization_url(
         auth_url = f"https://twitter.com/i/oauth2/authorize?{urllib.parse.urlencode(params)}"
 
     elif platform == "linkedin":
-        if not settings.linkedin_client_id:
+        env_vars = dotenv.dotenv_values(".env")
+        li_client_id = (env_vars.get("LINKEDIN_CLIENT_ID") or settings.linkedin_client_id or "").strip()
+        if not li_client_id:
             mock_url = f"{redirect_uri}?code=mock_linkedin_code&state={state}"
             return OAuthAuthorizeResponse(platform=platform, authorization_url=mock_url, state=state)
 
@@ -251,11 +305,20 @@ async def get_oauth_authorization_url(
             "platform": "linkedin",
             "created_at": datetime.now(timezone.utc),
         }
+        has_org_config = bool((env_vars.get("LINKEDIN_ORGANIZATION_ID") or getattr(settings, "linkedin_organization_id", "") or "").strip())
+        custom_scopes = (env_vars.get("LINKEDIN_SCOPES") or getattr(settings, "linkedin_scopes", "") or "").strip()
+        if custom_scopes:
+            scopes = custom_scopes
+        elif has_org_config:
+            scopes = "openid profile email w_member_social w_organization_social r_organization_social"
+        else:
+            scopes = "openid profile email w_member_social"
+
         params = {
             "response_type": "code",
-            "client_id": settings.linkedin_client_id,
+            "client_id": li_client_id,
             "redirect_uri": redirect_uri,
-            "scope": "openid profile email w_member_social",
+            "scope": scopes,
             "state": state,
         }
         auth_url = f"https://www.linkedin.com/oauth/v2/authorization?{urllib.parse.urlencode(params)}"
@@ -405,14 +468,17 @@ async def oauth_callback(
                         external_id = user_data.get("id")
 
             elif platform == "linkedin":
+                env_vars = dotenv.dotenv_values(".env")
+                li_client_id = (env_vars.get("LINKEDIN_CLIENT_ID") or settings.linkedin_client_id or "").strip()
+                li_client_secret = (env_vars.get("LINKEDIN_CLIENT_SECRET") or settings.linkedin_client_secret or "").strip()
                 res = await client.post(
                     "https://www.linkedin.com/oauth/v2/accessToken",
                     data={
                         "grant_type": "authorization_code",
                         "code": code,
                         "redirect_uri": redirect_uri,
-                        "client_id": settings.linkedin_client_id,
-                        "client_secret": settings.linkedin_client_secret,
+                        "client_id": li_client_id,
+                        "client_secret": li_client_secret,
                     },
                 )
                 data = res.json()
@@ -420,20 +486,39 @@ async def oauth_callback(
                 refresh_token = data.get("refresh_token", "")
                 expires_in = data.get("expires_in", 5184000)  # 60 days
                 expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-                handle = "GetyourclientsB2B"
-                external_id = "org_getyourclientsb2b"
+                env_org_id = (env_vars.get("LINKEDIN_ORGANIZATION_ID") or getattr(settings, "linkedin_organization_id", "") or "").strip()
+                handle = "GetYourClients B2B"
+                external_id = env_org_id.removeprefix("urn:li:organization:") if env_org_id else "org_getyourclientsb2b"
                 if access_token:
+                    # Attempt 1: Discover Organization Page via ACLs
                     try:
-                        me_res = await client.get(
-                            "https://api.linkedin.com/v2/userinfo",
+                        acl_res = await client.get(
+                            "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee",
                             headers={"Authorization": f"Bearer {access_token}"},
                         )
-                        if me_res.status_code == 200:
-                            me_data = me_res.json()
-                            handle = me_data.get("name") or "LinkedIn Profile"
-                            external_id = me_data.get("sub", "org_globalreach")
+                        if acl_res.status_code == 200:
+                            acl_elements = acl_res.json().get("elements", [])
+                            if acl_elements:
+                                org_target = acl_elements[0].get("organizationalTarget", "")
+                                if "organization:" in org_target:
+                                    external_id = org_target.split("organization:")[1]
+                                    handle = "GetYourClients B2B"
                     except Exception:
                         pass
+
+                    # Attempt 2: If no org configured or discovered, fallback to personal profile
+                    if not env_org_id and external_id == "org_getyourclientsb2b":
+                        try:
+                            me_res = await client.get(
+                                "https://api.linkedin.com/v2/userinfo",
+                                headers={"Authorization": f"Bearer {access_token}"},
+                            )
+                            if me_res.status_code == 200:
+                                me_data = me_res.json()
+                                handle = me_data.get("name") or "LinkedIn Profile"
+                                external_id = me_data.get("sub", "org_globalreach")
+                        except Exception:
+                            pass
 
             elif platform in ("meta", "instagram", "facebook"):
                 res = await client.get(

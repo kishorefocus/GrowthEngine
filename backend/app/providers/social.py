@@ -264,6 +264,20 @@ class LinkedInPublisher(SocialPublisher):
                 return PublishResult(external_post_id="", success=False, error="No access token provided for LinkedIn")
 
             author_urn = self._resolve_author_urn(post.account_id)
+            if ":self" in author_urn and post.access_token:
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as uclient:
+                        u_res = await uclient.get(
+                            "https://api.linkedin.com/v2/userinfo",
+                            headers={"Authorization": f"Bearer {post.access_token}"},
+                        )
+                        if u_res.status_code == 200:
+                            sub_id = u_res.json().get("sub")
+                            if sub_id:
+                                author_urn = f"urn:li:person:{sub_id}"
+                except Exception as exc:
+                    logger.warning("Could not resolve person sub from userinfo: %s", exc)
+
             version = self._get_api_version()
             url = "https://api.linkedin.com/rest/posts"
 
